@@ -1,0 +1,35 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--omit=dev"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["server.js", "db.js", "routes/**"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/.netlify/functions/api/auth/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/bot-invite"
+  to = "/.netlify/functions/api/bot-invite"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/support-invite"
+  to = "/.netlify/functions/api/support-invite"
+  status = 200
+  force = true

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard | Dark Portal</title>
+  <link rel="stylesheet" href="style.css?v=portal-v34" />
+</head>
+<body class="dark portal-home dashboard-page-v25 dashboard-page-v29 dashboard-page-v31 dashboard-page-v32 dashboard-page-v33">
+  <div id="portalFallingLayer" class="portal-falling-layer" aria-hidden="true"></div>
+  <header class="unified-topbar dashboard-topbar" aria-label="Dark Portal navigation">
+    <a class="unified-brand" href="/index.html" aria-label="Dark Portal home">
+      <img class="unified-brand-logo" src="/assets/darkhub-logo.png" alt="Dark Portal logo">
+      <span><strong>Dark Portal</strong><small>Dashboard</small></span>
+    </a>
+    <nav class="unified-nav" aria-label="Primary navigation">
+      <a href="/index.html">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/games.html">Games</a>
+      <a class="is-active" href="/dashboard.html" data-requires-account>Dashboard</a>
+      <a href="/stats.html" data-requires-account>Stats</a>
+      <button id="authBtn" class="unified-profile-btn" data-profile-label="Profile" type="button">Profile</button>
+    </nav>
+  </header>
+
+  <main class="portal-dashboard-v25 dashboard-v29 dashboard-v31 dashboard-v32 dashboard-v33">
+    <section class="dashboard-title-v25" aria-labelledby="dashboardTitle">
+      <div>
+        <span class="portal-mini-label">Discord bot control</span>
+        <h1 id="dashboardTitle">Manage your servers</h1>
+        <p>Select a server, then open its setup to configure access, commands and Dark Bot modules.</p>
+      </div>
+      <a id="dashInviteBot" class="dashboard-invite-pill-v25" href="/bot-invite" target="_blank" rel="noreferrer">
+        <span class="dashboard-invite-icon-v25">+</span>
+        <span><strong>Add Dark Bot</strong><small>Invite to a guild</small></span>
+      </a>
+    </section>
+
+    <section class="dashboard-console-v25">
+      <aside class="dashboard-left-v25" aria-label="Managed server list">
+        <div class="dashboard-user-card-v25" id="dashboardUserCard">Loading account...</div>
+        <div class="dashboard-server-list-v25" id="managedServers">Loading servers...</div>
+      </aside>
+
+      <section class="dashboard-right-v25" id="serverConfigPanel" aria-live="polite">
+        <span class="portal-mini-label">Server setup</span>
+        <h2>Choose a managed server</h2>
+        <p>Your selected server will show a setup overview, dashboard access, command permissions, bans/timeouts and security.</p>
+      </section>
+    </section>
+  </main>
+
+  <script src="common.js?v=portal-v34"></script>
+  <script src="dashboard.js?v=portal-v35"></script>
+</body>
+</html>

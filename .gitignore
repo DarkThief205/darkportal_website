@@ -1,0 +1,12 @@
+.env
+node_modules/
+dg.sqlite3
+*.sqlite
+*.db
+npm-debug.log*
+.DS_Store
+
+# Netlify/local deploy
+.netlify/
+dg.sqlite3
+*.sqlite3
