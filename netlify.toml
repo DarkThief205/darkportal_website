@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "20"
   NPM_FLAGS = "--omit=dev"
+  DB_PATH = "/tmp/dg.sqlite3"
+  DISCORD_BOT_STATUS = "online"
+  SECRETS_SCAN_OMIT_KEYS = "GUILD_DASHBOARD_TIMEOUT_MS,DISCORD_BOT_INVITE,DISCORD_CLIENT_ID,SUPPORT_INVITE_URL"
 
 [functions]
   node_bundler = "esbuild"
