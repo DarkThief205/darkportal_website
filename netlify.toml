@@ -1,38 +1,29 @@
 [build]
-  publish = "public"
+  publish = "."
   functions = "netlify/functions"
-
-[build.environment]
-  NODE_VERSION = "20"
-  NPM_FLAGS = "--omit=dev"
-  DB_PATH = "/tmp/dg.sqlite3"
-  DISCORD_BOT_STATUS = "online"
-  SECRETS_SCAN_OMIT_KEYS = "GUILD_DASHBOARD_TIMEOUT_MS,DISCORD_BOT_INVITE,DISCORD_CLIENT_ID,SUPPORT_INVITE_URL"
+  command = "npm run netlify-build"
 
 [functions]
   node_bundler = "esbuild"
-  included_files = ["server.js", "db.js", "routes/**"]
+  external_node_modules = ["sqlite3"]
+  included_files = ["routes/**", "assets/**", "*.html", "*.css", "*.js"]
 
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api/api/:splat"
+  to = "/.netlify/functions/server/api/:splat"
   status = 200
-  force = true
 
 [[redirects]]
   from = "/auth/*"
-  to = "/.netlify/functions/api/auth/:splat"
+  to = "/.netlify/functions/server/auth/:splat"
   status = 200
-  force = true
 
 [[redirects]]
   from = "/bot-invite"
-  to = "/.netlify/functions/api/bot-invite"
+  to = "/.netlify/functions/server/bot-invite"
   status = 200
-  force = true
 
 [[redirects]]
   from = "/support-invite"
-  to = "/.netlify/functions/api/support-invite"
+  to = "/.netlify/functions/server/support-invite"
   status = 200
-  force = true

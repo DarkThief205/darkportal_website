@@ -1,47 +1,10 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const fs = require('fs');
-
-function isNetlifyFunctionRuntime() {
-  return !!(
-    process.env.NETLIFY ||
-    process.env.NETLIFY_LOCAL ||
-    process.env.AWS_LAMBDA_FUNCTION_NAME ||
-    process.env.LAMBDA_TASK_ROOT ||
-    process.env.AWS_EXECUTION_ENV
-  );
-}
-
-function resolveDbPath() {
-  const configured = String(process.env.DB_PATH || '').trim();
-  if (configured) return configured;
-
-  // Netlify Functions run on a read-only bundle filesystem. /tmp is the writable
-  // location available during a function invocation.
-  if (isNetlifyFunctionRuntime()) return path.join('/tmp', 'dg.sqlite3');
-
-  return path.join(__dirname, 'dg.sqlite3');
-}
-
-const dbPath = resolveDbPath();
-const dbDir = path.dirname(dbPath);
-
-try {
-  fs.mkdirSync(dbDir, { recursive: true });
-} catch (error) {
-  console.warn(`Could not create database directory ${dbDir}:`, error.message);
-}
-
-const db = new sqlite3.Database(dbPath, (error) => {
-  if (error) {
-    console.error(`SQLite failed to open ${dbPath}:`, error.message);
-    return;
-  }
-  if (process.env.DEBUG_DB_PATH === 'true') console.log(`SQLite database path: ${dbPath}`);
-});
+const dbPath = process.env.SQLITE_DB_PATH || (process.env.NETLIFY_SERVERLESS === 'true' ? path.join('/tmp', 'dg.sqlite3') : path.join(__dirname, 'dg.sqlite3'));
+const db = new sqlite3.Database(dbPath);
 
 function init() {
-  return new Promise((resolve, reject) => {
+  return new Promise(resolve => {
     db.serialize(() => {
       db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,9 +36,7 @@ function init() {
         apple_id TEXT UNIQUE,
         apple_name TEXT,
         apple_email TEXT
-      )`, err => {
-        if (err) return reject(err);
-      });
+      )`);
 
       db.run(`CREATE TABLE IF NOT EXISTS game_progress (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,9 +51,7 @@ function init() {
         meta_json TEXT DEFAULT '{}',
         UNIQUE(user_id, game_key),
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-      )`, err => {
-        if (err) return reject(err);
-      });
+      )`);
 
       db.run(`CREATE TABLE IF NOT EXISTS portal_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,9 +62,7 @@ function init() {
         created_at INTEGER NOT NULL,
         meta_json TEXT DEFAULT '{}',
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-      )`, err => {
-        if (err) return reject(err);
-      });
+      )`);
 
       db.run(`CREATE TABLE IF NOT EXISTS portal_feedback (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,9 +72,7 @@ function init() {
         created_at INTEGER NOT NULL,
         status TEXT DEFAULT 'new',
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-      )`, err => {
-        if (err) return reject(err);
-      });
+      )`);
 
       db.run(`CREATE TABLE IF NOT EXISTS tictactoe_matches (
         id TEXT PRIMARY KEY,
@@ -137,10 +92,7 @@ function init() {
         updated_at INTEGER NOT NULL,
         finished_at INTEGER,
         meta_json TEXT DEFAULT '{}'
-      )`, err => {
-        if (err) return reject(err);
-        resolve();
-      });
+      )`, () => resolve());
     });
   });
 }
@@ -235,4 +187,4 @@ function addMigrations() {
   });
 }
 
-module.exports = { db, init, addMigrations, dbPath };
+module.exports = { db, init, addMigrations };

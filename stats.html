@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stats | Dark Portal</title>
+  <link rel="stylesheet" href="style.css?v=portal-v37" />
+</head>
+<body class="dark portal-home stats-page-v22">
+  <div id="portalFallingLayer" class="portal-falling-layer" aria-hidden="true"></div>
+  <header class="unified-topbar stats-topbar" aria-label="Dark Portal navigation">
+    <a class="unified-brand" href="/index.html" aria-label="Dark Portal home">
+      <img class="unified-brand-logo" src="/assets/darkhub-logo.png" alt="Dark Portal logo">
+      <span><strong>Dark Portal</strong><small>Stats</small></span>
+    </a>
+    <nav class="unified-nav" aria-label="Primary navigation">
+      <a href="/index.html">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/games.html">Games</a>
+      <a href="/dashboard.html" data-requires-account>Dashboard</a>
+      <a class="is-active" href="/stats.html" data-requires-account>Stats</a>
+      <button id="authBtn" class="unified-profile-btn" data-profile-label="Profile" type="button">Profile</button>
+    </nav>
+  </header>
+
+  <main class="portal-stats-v22">
+    <section class="stats-hero-v22" id="statsHero">Loading stats...</section>
+    <section class="stats-columns-v22" id="statsColumns"></section>
+  </main>
+
+  <script src="common.js?v=portal-v37"></script>
+  <script src="stats.js?v=portal-v34"></script>
+</body>
+</html>

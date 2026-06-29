@@ -3,7 +3,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const path = require('path');
 const { db, init, addMigrations } = require('./db');
 const createTicTacToeRouter = require('./routes/games/tictactoe.routes');
 
@@ -18,15 +17,7 @@ const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || `${BASE_URL}/au
 const DISCORD_BOT_INVITE = process.env.DISCORD_BOT_INVITE || '';
 const SUPPORT_INVITE_URL = process.env.SUPPORT_INVITE_URL || 'https://discord.gg/bJ8dqwSCuU';
 const configuredBotStatusUrl = process.env.DISCORD_BOT_STATUS_URL || process.env.BOT_STATUS_URL || '';
-function cleanConfiguredUrl(value) {
-  const v = String(value || '').trim();
-  if (!v || v.includes('YOUR_') || v.includes('placeholder')) return '';
-  // A local bot URL is valid only while running the site locally. On Netlify it would
-  // point back to the function container, not to your Discord bot process.
-  if ((process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(v)) return '';
-  return v;
-}
-const DISCORD_BOT_STATUS_URL = cleanConfiguredUrl(configuredBotStatusUrl);
+const DISCORD_BOT_STATUS_URL = (!configuredBotStatusUrl || configuredBotStatusUrl.includes('YOUR_') || configuredBotStatusUrl.includes('placeholder')) ? 'http://127.0.0.1:3001/status' : configuredBotStatusUrl;
 const STATUS_CHECK_TIMEOUT_MS = Math.min(Math.max(Number(process.env.STATUS_CHECK_TIMEOUT_MS || 650), 250), 1200);
 function discordBotInviteUrl() {
   // Use the exact invite the owner provided. Do not mutate it with extra query params,
@@ -94,16 +85,7 @@ async function finishLocalProviderLogin(provider, next, res, req = null, linkTok
   }
 }
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || process.env.BASE_URL || '')
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(Boolean);
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('CORS origin not allowed'));
-  }
-}));
+app.use(cors());
 
 app.get('/bot-invite', (req, res) => res.redirect(discordBotInviteUrl()));
 app.get('/support-invite', (req, res) => res.redirect(SUPPORT_INVITE_URL));
@@ -176,13 +158,8 @@ app.get('/api/portal-status', async (req, res) => {
   // If this JSON route responds, the website process itself is online.
   const websiteState = 'online';
 
-  const manualBotStatus = process.env.DISCORD_BOT_STATUS || process.env.BOT_STATUS || '';
   const botProbe = await probeStatusUrl(DISCORD_BOT_STATUS_URL);
-  // If no public bot status endpoint is configured, keep the portal badge from
-  // reporting a false OFFLINE. Set DISCORD_BOT_STATUS=offline/partial/critical if
-  // you want to override it manually, or set DISCORD_BOT_STATUS_URL for a real probe.
-  const botState = botProbe || normalizePortalStatus(manualBotStatus, 'online');
-  const botStatusSource = botProbe ? DISCORD_BOT_STATUS_URL : (manualBotStatus ? 'manual env' : 'manual fallback');
+  const botState = botProbe || 'offline';
 
   res.json({
     checkedAt: new Date().toISOString(),
@@ -195,7 +172,7 @@ app.get('/api/portal-status', async (req, res) => {
     bot: {
       state: botState,
       label: statusLabel(botState),
-      detail: statusDetail(botState, botStatusSource),
+      detail: botProbe ? statusDetail(botState, DISCORD_BOT_STATUS_URL) : statusDetail(botState, DISCORD_BOT_STATUS_URL),
       invite: discordBotInviteUrl()
     },
     supportInvite: SUPPORT_INVITE_URL,
@@ -207,12 +184,7 @@ app.get('/api/portal-status', async (req, res) => {
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-const PUBLIC_DIR = path.join(__dirname, 'public');
-app.use(express.static(PUBLIC_DIR, {
-  dotfiles: 'ignore',
-  index: ['index.html'],
-  maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0
-}));
+app.use(express.static('.'));
 
 const dbReady = Promise.resolve(init()).then(() => addMigrations());
 
@@ -879,8 +851,22 @@ function discordGuildIcon(guild) {
 }
 
 async function readDiscordManagedGuilds(user) {
-  if (!user?.discord_id) return { guilds: [], note: 'Link Discord in Profile to load manageable servers and bot options.' };
-  if (!user?.discord_access_token) return { guilds: [], note: 'Discord is linked, but server access needs to be refreshed from Profile.' };
+  if (!user?.discord_id) {
+    return {
+      guilds: [],
+      note: 'Link Discord in Profile to load manageable servers and bot options.',
+      needsDiscordLink: true,
+      needsDiscordRefresh: false
+    };
+  }
+  if (!user?.discord_access_token) {
+    return {
+      guilds: [],
+      note: 'Discord is linked, but access needs to be refreshed before server controls can load.',
+      needsDiscordLink: false,
+      needsDiscordRefresh: true
+    };
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3600);
   try {
@@ -889,7 +875,12 @@ async function readDiscordManagedGuilds(user) {
       cache: 'no-store',
       headers: { authorization: `Bearer ${user.discord_access_token}`, accept: 'application/json' }
     });
-    if (!resp.ok) return { guilds: [], note: resp.status === 401 ? 'Discord session needs to be refreshed. Login with Discord again.' : 'Could not load Discord guilds right now.' };
+    if (!resp.ok) return {
+      guilds: [],
+      note: resp.status === 401 ? 'Discord session needs to be refreshed in Profile.' : 'Could not load Discord guilds right now.',
+      needsDiscordLink: false,
+      needsDiscordRefresh: resp.status === 401
+    };
     const guilds = await resp.json();
     const manageable = Array.isArray(guilds) ? guilds.filter(isManageableGuild).slice(0, 18).map((g) => ({
       id: g.id,
@@ -911,8 +902,7 @@ async function readDiscordManagedGuilds(user) {
 
 
 function botStatusBaseUrl() {
-  const raw = cleanConfiguredUrl(process.env.DISCORD_BOT_STATUS_URL || process.env.BOT_STATUS_URL || '');
-  if (!raw) return '';
+  const raw = process.env.DISCORD_BOT_STATUS_URL || 'http://127.0.0.1:3001/status';
   try {
     const u = new URL(raw);
     u.pathname = '';
@@ -920,7 +910,7 @@ function botStatusBaseUrl() {
     u.hash = '';
     return u.toString().replace(/\/$/, '');
   } catch {
-    return '';
+    return 'http://127.0.0.1:3001';
   }
 }
 
@@ -929,7 +919,6 @@ async function readBotGuildDashboard(guildId) {
   const timer = setTimeout(() => controller.abort(), Number(process.env.GUILD_DASHBOARD_TIMEOUT_MS || 9000));
   try {
     const base = botStatusBaseUrl();
-    if (!base) throw new Error('Dark Bot dashboard endpoint is not configured yet. Set DISCORD_BOT_STATUS_URL to a public bot API URL.');
     const resp = await fetch(`${base}/api/guild/${encodeURIComponent(guildId)}/dashboard`, {
       signal: controller.signal,
       cache: 'no-store',
@@ -996,6 +985,8 @@ app.get('/api/dashboard', getBearerUser, async (req, res) => {
       progress: progress || [],
       managedServers: discordGuilds.guilds,
       managedServersNote: discordGuilds.note,
+      needsDiscordLink: !!discordGuilds.needsDiscordLink,
+      needsDiscordRefresh: !!discordGuilds.needsDiscordRefresh,
       botInvite: discordBotInviteUrl() || null,
       supportInvite: SUPPORT_INVITE_URL
     });
@@ -1231,7 +1222,7 @@ app.get('/api/me', getBearerUser, async (req, res) => {
   }
 });
 
-if (require.main === module) {
+if (process.env.NETLIFY_SERVERLESS !== 'true') {
   dbReady.finally(() => {
     app.listen(PORT, () => console.log(`\nServer running on http://localhost:${PORT}\n`));
   });

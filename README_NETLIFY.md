@@ -1,34 +1,28 @@
-# Dark Portal — Netlify-ready package
+# Dark Portal — Netlify-ready deploy
 
-## What is inside
+This ZIP is prepared for Netlify with static files plus a Netlify Function wrapper for the Express backend.
 
-- `public/` — static frontend files that Netlify publishes.
-- `netlify/functions/api.js` — serverless wrapper for the existing Express backend.
-- `server.js`, `db.js`, `routes/` — backend code used by the Netlify function.
-- `netlify.toml` — Netlify publish/functions/redirect configuration.
-- `NETLIFY_ENV_REQUIRED.md` — environment variables to add in Netlify UI.
+## Deploy
+1. Upload/import this whole folder/ZIP to Netlify.
+2. In Netlify, use these settings if asked:
+   - Build command: `npm run netlify-build`
+   - Publish directory: `.`
+   - Functions directory: `netlify/functions`
+3. Add the variables from `.env` in Netlify: Site configuration → Environment variables.
+4. In Discord/Google/Steam developer settings, use these production callback URLs:
+   - Discord: `https://darkportal.is-a.dev/auth/discord/callback`
+   - Google: `https://darkportal.is-a.dev/auth/google/callback`
+   - Steam return URL: `https://darkportal.is-a.dev/auth/steam/callback`
+   - Steam realm: `https://darkportal.is-a.dev`
 
-## Deploy method
+## Included
+- 125%-like desktop visual density from v5
+- Google verification file
+- `robots.txt` and `sitemap.xml`
+- Dashboard Discord link/refresh logic
+- Netlify redirects for `/api/*`, `/auth/*`, `/bot-invite`, and `/support-invite`
 
-For the full site with `/api/*` and `/auth/*`, deploy this project through GitHub import or Netlify CLI.
-Netlify Drop/drag-and-drop is best for static-only folders and may not run the backend function build reliably.
+## Important database note
+This version uses SQLite. On Netlify Functions, SQLite storage is not durable across cold starts. The dashboard routes can run, but real long-term production accounts should use a persistent hosted database later.
 
-Recommended:
-
-```bash
-npm install
-npx netlify-cli deploy --prod
-```
-
-Or push this folder to GitHub and import it in Netlify.
-
-## Important Netlify limitation
-
-This package uses SQLite in `/tmp` on Netlify functions. It can boot and work for tests, but `/tmp` is not a permanent production database. For real accounts, provider linking, stats, and feedback, move the database to a persistent service such as PostgreSQL, Supabase, Neon, Turso, or a VPS-hosted backend.
-
-## Before going live
-
-1. Add all variables from `NETLIFY_ENV_REQUIRED.md` in Netlify.
-2. Set `BASE_URL` to your live domain, for example `https://darkportal.is-a.dev`.
-3. Add the same OAuth callback URLs in Discord, Google and Steam.
-4. In Netlify, add `darkportal.is-a.dev` as a custom domain after the is-a.dev PR is approved.
+Do not share this ZIP publicly if `.env` contains private secrets.
