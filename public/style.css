@@ -9525,3 +9525,49 @@ body.sudoku-modal-open .unified-topbar{
   .profile-provider-card-v35 .provider-left-v26{ flex-direction:row; }
   .bot-gate-head-v35{ align-items:flex-start; flex-direction:column; }
 }
+
+/* === v36: Dark Portal home footer tint stretch ===
+   Keeps the copyright bar attached to the bottom of the viewport on short screens,
+   so the tinted footer area fills the empty gap below the cards. */
+body.portal-home .portal-home-page{
+  min-height: calc(100dvh - 110px) !important;
+  margin-bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+body.portal-home .portal-home-shell{
+  flex: 0 0 auto !important;
+}
+
+body.portal-home .portal-footer{
+  flex: 1 0 92px !important;
+  min-height: 92px !important;
+  margin: 0 !important;
+  padding: 22px 16px max(22px, env(safe-area-inset-bottom)) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  border: 1px solid rgba(127,76,255,.16) !important;
+  border-top: 0 !important;
+  border-radius: 0 0 34px 34px !important;
+  background:
+    linear-gradient(180deg, rgba(6,7,18,.56), rgba(6,7,18,.86)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 24px 70px rgba(0,0,0,.18) !important;
+}
+
+body.portal-home .portal-footer p{
+  margin: 0 !important;
+}
+
+@media (max-width: 560px){
+  body.portal-home .portal-home-page{
+    min-height: calc(100dvh - 92px) !important;
+  }
+  body.portal-home .portal-footer{
+    border-radius: 0 0 24px 24px !important;
+  }
+}

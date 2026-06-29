@@ -879,7 +879,8 @@ function discordGuildIcon(guild) {
 }
 
 async function readDiscordManagedGuilds(user) {
-  if (!user?.discord_access_token) return { guilds: [], note: 'Link Discord in Profile to load manageable servers and bot options.' };
+  if (!user?.discord_id) return { guilds: [], note: 'Link Discord in Profile to load manageable servers and bot options.' };
+  if (!user?.discord_access_token) return { guilds: [], note: 'Discord is linked, but server access needs to be refreshed from Profile.' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 3600);
   try {

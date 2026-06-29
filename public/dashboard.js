@@ -1,4 +1,4 @@
-// Dashboard v34 — centered accordion sections with click-to-collapse
+// Dashboard v35 — Discord-link-aware dashboard gate
 (function(){
   const esc = (v) => window.DGAuth?.escapeHtml ? window.DGAuth.escapeHtml(v) : String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const userCard = document.getElementById('dashboardUserCard');
@@ -104,6 +104,13 @@
     return `<a id="dashInviteBot" class="dashboard-invite-inside-v28 dashboard-invite-inside-v29" href="${esc(currentInvite || '/bot-invite')}" target="_blank" rel="noreferrer"><span class="dashboard-invite-icon-v25 discord-icon-v26">${discordIcon()}</span><span><strong>Add Dark Bot</strong><small>Invite to guild</small></span></a>`;
   }
   function wireInvite(){ const btn = document.getElementById('dashInviteBot'); if (btn) btn.href = currentInvite || '/bot-invite'; }
+  function hasDiscordLinked(u){ return !!(u?.discord || u?.linked?.discord || u?.discord_id); }
+  function discordProfileActionHtml(){
+    const linked = hasDiscordLinked(currentUser || localProfile());
+    return linked
+      ? `<a class="btn btn-ghost" href="/profile.html">Refresh Discord access</a>`
+      : `<a class="btn btn-primary" href="/profile.html">Link Discord in Profile</a>`;
+  }
 
   function renderUser(u){
     currentUser = u || currentUser;
@@ -120,7 +127,11 @@
   }
   function renderNoServers(note){
     configPanel.hidden = true;
-    serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord Bot Control</span><h2>No servers loaded</h2><p>${esc(note || 'Login with Discord again or invite Dark Bot to a guild to start configuring it.')}</p></div>${inviteButtonHtml()}</div><div class="empty-server-v25"><div class="dashboard-action-row-v25"><a class="btn btn-primary" href="/profile.html">Link Discord in Profile</a></div></div>`;
+    const linked = hasDiscordLinked(currentUser || localProfile());
+    const fallbackNote = linked
+      ? 'Discord is linked, but no manageable servers were loaded. Refresh Discord access or invite Dark Bot to a guild.'
+      : 'Link Discord in Profile to manage servers and bot options.';
+    serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord Bot Control</span><h2>${linked ? 'Discord access needed' : 'Discord not connected'}</h2><p>${esc(note || fallbackNote)}</p></div>${inviteButtonHtml()}</div><div class="empty-server-v25"><div class="dashboard-action-row-v25">${discordProfileActionHtml()}</div></div>`;
     wireInvite();
   }
   function renderServers(guilds, note){
