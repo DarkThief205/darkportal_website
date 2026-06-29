@@ -1,28 +1,41 @@
-# Dark Portal — Netlify-ready deploy
+# Dark Portal — Netlify-ready package
 
-This ZIP is prepared for Netlify with static files plus a Netlify Function wrapper for the Express backend.
+This version is laid out like a Netlify deploy:
+
+- `public/` contains the static site files, assets, and games.
+- `netlify/functions/api.js` runs the Express backend as a Netlify Function.
+- `netlify.toml` routes `/api/*`, `/auth/*`, `/bot-invite`, and `/support-invite` to the function.
+- Backend files stay at the repo root: `server.js`, `db.js`, and `routes/`.
 
 ## Deploy
-1. Upload/import this whole folder/ZIP to Netlify.
-2. In Netlify, use these settings if asked:
-   - Build command: `npm run netlify-build`
-   - Publish directory: `.`
+
+1. Upload this folder/ZIP to GitHub.
+2. Connect it to Netlify.
+3. In Netlify build settings, use:
+   - Build command: leave blank, or use `npm install` if your Netlify UI requires one.
+   - Publish directory: `public`
    - Functions directory: `netlify/functions`
-3. Add the variables from `.env` in Netlify: Site configuration → Environment variables.
-4. In Discord/Google/Steam developer settings, use these production callback URLs:
-   - Discord: `https://darkportal.is-a.dev/auth/discord/callback`
-   - Google: `https://darkportal.is-a.dev/auth/google/callback`
-   - Steam return URL: `https://darkportal.is-a.dev/auth/steam/callback`
-   - Steam realm: `https://darkportal.is-a.dev`
+4. Add the variables from `NETLIFY_ENV_REQUIRED.md` in Netlify environment variables.
 
-## Included
-- 125%-like desktop visual density from v5
-- Google verification file
-- `robots.txt` and `sitemap.xml`
-- Dashboard Discord link/refresh logic
-- Netlify redirects for `/api/*`, `/auth/*`, `/bot-invite`, and `/support-invite`
+## Local test
 
-## Important database note
-This version uses SQLite. On Netlify Functions, SQLite storage is not durable across cold starts. The dashboard routes can run, but real long-term production accounts should use a persistent hosted database later.
+```bash
+npm install
+npm start
+```
 
-Do not share this ZIP publicly if `.env` contains private secrets.
+Then open `http://localhost:3000`.
+
+To test Netlify redirects/functions locally, install the Netlify CLI and run:
+
+```bash
+netlify dev
+```
+
+## Notes
+
+The uploaded source ZIP contained a real `.env` file. This Netlify-ready ZIP intentionally does **not** include `.env`; use `.env.example` and Netlify environment variables instead.
+
+SQLite in Netlify Functions writes to `/tmp` by default, which is temporary storage. Use a hosted database for production persistence.
+
+Google Search Console verification is included at `public/google92111987cc89c5cd.html`.

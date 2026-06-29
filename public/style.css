@@ -9526,48 +9526,216 @@ body.sudoku-modal-open .unified-topbar{
   .bot-gate-head-v35{ align-items:flex-start; flex-direction:column; }
 }
 
-/* === v36: Dark Portal home footer tint stretch ===
-   Keeps the copyright bar attached to the bottom of the viewport on short screens,
-   so the tinted footer area fills the empty gap below the cards. */
+/* === v36 home viewport fit + dashboard Discord gate polish ===
+   Keeps the home page clean at 100% browser zoom without adding a footer bubble. */
+body.portal-home{
+  min-height:100dvh !important;
+}
 body.portal-home .portal-home-page{
-  min-height: calc(100dvh - 110px) !important;
-  margin-bottom: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
+  min-height:calc(100dvh - var(--unified-topbar-height, 72px) - 10px) !important;
+  display:flex !important;
+  flex-direction:column !important;
+  width:min(1220px, calc(100% - 32px)) !important;
+  margin:clamp(10px, 1.8dvh, 22px) auto 0 !important;
 }
-
-body.portal-home .portal-home-shell{
-  flex: 0 0 auto !important;
+body.portal-home .portal-home-shell-v10{
+  min-height:clamp(520px, calc(100dvh - var(--unified-topbar-height, 72px) - 118px), 640px) !important;
+  gap:clamp(18px, 2.25dvh, 32px) !important;
+  padding:clamp(24px, 3.4dvh, 44px) clamp(26px, 3.8vw, 50px) !important;
 }
-
+body.portal-home .portal-home-head-v10{
+  gap:clamp(16px, 3vw, 42px) !important;
+}
+body.portal-home .portal-hero-v10 h1{
+  font-size:clamp(3.05rem, 5vw, 5.15rem) !important;
+  line-height:.94 !important;
+}
+body.portal-home .portal-invite-bubble,
+body.portal-home .portal-invite-bubble-v13{
+  min-height:clamp(92px, 13dvh, 112px) !important;
+  padding:clamp(14px, 2dvh, 18px) clamp(16px, 2vw, 20px) !important;
+}
+body.portal-home .portal-invite-icon,
+body.portal-home .portal-invite-bubble-v13 .portal-invite-icon{
+  width:clamp(58px, 7.5dvh, 72px) !important;
+  height:clamp(58px, 7.5dvh, 72px) !important;
+}
+body.portal-home .portal-card-v10{
+  min-height:clamp(218px, 28dvh, 255px) !important;
+  padding:clamp(18px, 2.4dvh, 28px) !important;
+}
+body.portal-home .portal-card-v10 .portal-card-icon{
+  width:clamp(58px, 7.5dvh, 70px) !important;
+  height:clamp(58px, 7.5dvh, 70px) !important;
+}
+body.portal-home .portal-card-v10 small{
+  min-height:0 !important;
+}
 body.portal-home .portal-footer{
-  flex: 1 0 92px !important;
-  min-height: 92px !important;
-  margin: 0 !important;
-  padding: 22px 16px max(22px, env(safe-area-inset-bottom)) !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  text-align: center !important;
-  border: 1px solid rgba(127,76,255,.16) !important;
-  border-top: 0 !important;
-  border-radius: 0 0 34px 34px !important;
-  background:
-    linear-gradient(180deg, rgba(6,7,18,.56), rgba(6,7,18,.86)) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.035),
-    0 24px 70px rgba(0,0,0,.18) !important;
+  margin-top:auto !important;
+  padding:12px 0 max(10px, env(safe-area-inset-bottom)) !important;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
 }
-
 body.portal-home .portal-footer p{
-  margin: 0 !important;
+  margin:0 !important;
 }
-
-@media (max-width: 560px){
+@media (min-width: 961px) and (max-height: 820px){
+  body.portal-home .portal-home-page{ width:min(1170px, calc(100% - 32px)) !important; }
+  body.portal-home .portal-home-shell-v10{
+    min-height:clamp(500px, calc(100dvh - var(--unified-topbar-height, 72px) - 112px), 600px) !important;
+    gap:18px !important;
+    padding:24px clamp(26px, 3vw, 42px) !important;
+    border-radius:30px !important;
+  }
+  body.portal-home .portal-hero-v10 h1{ font-size:clamp(2.95rem, 4.55vw, 4.65rem) !important; }
+  body.portal-home .portal-card-v10{ min-height:210px !important; }
+  body.portal-home .portal-invite-bubble-v13{ min-height:96px !important; }
+}
+@media (max-width: 1080px){
   body.portal-home .portal-home-page{
-    min-height: calc(100dvh - 92px) !important;
+    min-height:auto !important;
+    margin-bottom:24px !important;
+  }
+  body.portal-home .portal-home-shell-v10{
+    min-height:auto !important;
   }
   body.portal-home .portal-footer{
-    border-radius: 0 0 24px 24px !important;
+    margin-top:18px !important;
+  }
+}
+.dashboard-discord-gate-note-v36{
+  margin:0 0 14px !important;
+  color:rgba(245,240,255,.66) !important;
+  font-weight:800 !important;
+  line-height:1.5 !important;
+}
+
+/* === Dark Portal v37: adaptive home height at 100% zoom ===
+   The shell grows to fill the remaining viewport instead of leaving a large empty band
+   between the main card and the copyright footer. Keeps the footer outside and clean. */
+@media (min-width: 1081px){
+  body.portal-home{
+    min-height:100svh !important;
+    min-height:100dvh !important;
+    overflow-x:hidden !important;
+  }
+  body.portal-home .portal-home-page{
+    min-height:calc(100svh - var(--unified-topbar-height, 72px) - clamp(12px, 1.8svh, 22px)) !important;
+    min-height:calc(100dvh - var(--unified-topbar-height, 72px) - clamp(12px, 1.8dvh, 22px)) !important;
+    display:flex !important;
+    flex-direction:column !important;
+    width:min(1220px, calc(100% - 32px)) !important;
+    margin:clamp(10px, 1.8dvh, 20px) auto 0 !important;
+  }
+  body.portal-home .portal-home-shell-v10{
+    flex:1 1 auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    display:grid !important;
+    align-content:center !important;
+    gap:clamp(18px, 2.6dvh, 34px) !important;
+    padding:clamp(24px, 3.2dvh, 46px) clamp(26px, 3.8vw, 50px) !important;
+  }
+  body.portal-home .portal-footer{
+    flex:0 0 auto !important;
+    margin-top:clamp(8px, 1.2dvh, 14px) !important;
+    padding:0 0 max(10px, env(safe-area-inset-bottom)) !important;
+    background:transparent !important;
+    border:0 !important;
+    border-radius:0 !important;
+    box-shadow:none !important;
+  }
+  body.portal-home .portal-footer p{
+    margin:0 !important;
+    line-height:1.25 !important;
+  }
+}
+@media (min-width:1081px) and (max-height:850px){
+  body.portal-home .portal-home-page{
+    margin-top:clamp(8px, 1.2dvh, 14px) !important;
+    min-height:calc(100dvh - var(--unified-topbar-height, 72px) - clamp(8px, 1.2dvh, 14px)) !important;
+  }
+  body.portal-home .portal-home-shell-v10{
+    gap:clamp(16px, 2dvh, 24px) !important;
+    padding:clamp(22px, 2.8dvh, 34px) clamp(26px, 3vw, 44px) !important;
+  }
+  body.portal-home .portal-hero-v10 h1{
+    font-size:clamp(2.9rem, 4.75vw, 4.8rem) !important;
+  }
+  body.portal-home .portal-card-v10{
+    min-height:clamp(205px, 27dvh, 248px) !important;
+  }
+  body.portal-home .portal-invite-bubble-v13{
+    min-height:clamp(90px, 12dvh, 108px) !important;
+  }
+}
+@media (max-width:1080px){
+  body.portal-home .portal-footer{
+    margin-top:18px !important;
+    padding-bottom:max(16px, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* === Dark Portal v38: desktop visual density ===
+   Makes the site feel like the nicer 125% browser-zoom view while the browser can stay at 100%.
+   The scale backs off on smaller CSS viewports so users who already zoom in do not get a huge layout. */
+:root{
+  --portal-visual-density: 1;
+}
+@media (min-width: 1500px){
+  :root{ --portal-visual-density: 1.025; }
+}
+@media (min-width: 1650px){
+  :root{ --portal-visual-density: 1.075; }
+}
+@media (min-width: 1850px){
+  :root{ --portal-visual-density: 1.115; }
+}
+@media (min-width: 2150px){
+  :root{ --portal-visual-density: 1.15; }
+}
+@media (min-width: 1081px){
+  @supports (zoom: 1.1){
+    body.portal-home .unified-topbar,
+    body.portal-home .portal-home-page,
+    body.portal-home .portal-dashboard-v25,
+    body.portal-home .portal-profile-page,
+    body.portal-home .portal-stats-v22,
+    body.games-body .unified-topbar,
+    body.games-body .games-shell,
+    body.auth-page-provider .unified-topbar,
+    body.auth-page-provider .auth-landing-provider,
+    body.sudoku-arena .unified-topbar,
+    body.sudoku-arena .sudoku-page,
+    body.dark > .page{
+      zoom: var(--portal-visual-density);
+    }
+  }
+}
+
+/* Home page compensation for the desktop density scale: keep the copyright visible
+   and avoid the stretched empty band below the main panel. */
+@media (min-width: 1850px){
+  body.portal-home:not(.dashboard-page-v25):not(.portal-profile-body):not(.stats-page-v22):not(.portal-about-page-body):not(.portal-info-page-body) .portal-home-page{
+    width:min(1100px, calc(100% - 32px)) !important;
+    min-height:calc(89dvh - var(--unified-topbar-height, 72px)) !important;
+    margin-top:clamp(8px, 1.3dvh, 14px) !important;
+  }
+  body.portal-home:not(.dashboard-page-v25):not(.portal-profile-body):not(.stats-page-v22):not(.portal-about-page-body):not(.portal-info-page-body) .portal-home-shell-v10{
+    gap:clamp(14px, 2dvh, 24px) !important;
+    padding:clamp(22px, 2.65dvh, 34px) clamp(24px, 3vw, 42px) !important;
+  }
+  body.portal-home:not(.dashboard-page-v25):not(.portal-profile-body):not(.stats-page-v22):not(.portal-about-page-body):not(.portal-info-page-body) .portal-footer{
+    margin-top:clamp(6px, .8dvh, 10px) !important;
+    padding-bottom:max(8px, env(safe-area-inset-bottom)) !important;
+  }
+}
+@media (min-width: 1650px) and (max-width: 1849px){
+  body.portal-home:not(.dashboard-page-v25):not(.portal-profile-body):not(.stats-page-v22):not(.portal-about-page-body):not(.portal-info-page-body) .portal-home-page{
+    width:min(1140px, calc(100% - 32px)) !important;
+    min-height:calc(93dvh - var(--unified-topbar-height, 72px)) !important;
   }
 }

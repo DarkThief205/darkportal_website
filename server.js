@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -9,7 +11,7 @@ const createTicTacToeRouter = require('./routes/games/tictactoe.routes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || `http://localhost:${PORT}`;
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
@@ -184,7 +186,8 @@ app.get('/api/portal-status', async (req, res) => {
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(express.static('.'));
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(fs.existsSync(publicDir) ? publicDir : '.'));
 
 const dbReady = Promise.resolve(init()).then(() => addMigrations());
 
@@ -1222,10 +1225,11 @@ app.get('/api/me', getBearerUser, async (req, res) => {
   }
 });
 
-if (process.env.NETLIFY_SERVERLESS !== 'true') {
+if (require.main === module) {
   dbReady.finally(() => {
     app.listen(PORT, () => console.log(`\nServer running on http://localhost:${PORT}\n`));
   });
 }
 
-module.exports = { app, dbReady };
+module.exports = app;
+module.exports.dbReady = dbReady;

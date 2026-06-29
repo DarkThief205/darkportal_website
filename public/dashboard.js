@@ -1,4 +1,4 @@
-// Dashboard v35 — Discord-link-aware dashboard gate
+// Dashboard v34 — centered accordion sections with click-to-collapse
 (function(){
   const esc = (v) => window.DGAuth?.escapeHtml ? window.DGAuth.escapeHtml(v) : String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const userCard = document.getElementById('dashboardUserCard');
@@ -104,13 +104,6 @@
     return `<a id="dashInviteBot" class="dashboard-invite-inside-v28 dashboard-invite-inside-v29" href="${esc(currentInvite || '/bot-invite')}" target="_blank" rel="noreferrer"><span class="dashboard-invite-icon-v25 discord-icon-v26">${discordIcon()}</span><span><strong>Add Dark Bot</strong><small>Invite to guild</small></span></a>`;
   }
   function wireInvite(){ const btn = document.getElementById('dashInviteBot'); if (btn) btn.href = currentInvite || '/bot-invite'; }
-  function hasDiscordLinked(u){ return !!(u?.discord || u?.linked?.discord || u?.discord_id); }
-  function discordProfileActionHtml(){
-    const linked = hasDiscordLinked(currentUser || localProfile());
-    return linked
-      ? `<a class="btn btn-ghost" href="/profile.html">Refresh Discord access</a>`
-      : `<a class="btn btn-primary" href="/profile.html">Link Discord in Profile</a>`;
-  }
 
   function renderUser(u){
     currentUser = u || currentUser;
@@ -125,13 +118,22 @@
     serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord Bot Control</span><h2>Loading servers...</h2><p>Reading your Discord guilds. This should take only a few seconds.</p></div>${inviteButtonHtml()}</div><div class="server-skeleton-stack-v26"><span></span><span></span><span></span></div>`;
     wireInvite();
   }
-  function renderNoServers(note){
+  function hasDiscordLinked(){
+    const p = currentUser || localProfile() || {};
+    return !!(p.discord || p.discord_id || p.linked?.discord);
+  }
+  function noServersActionHtml(state = {}){
+    const linked = state.hasDiscord ?? hasDiscordLinked();
+    const label = linked ? 'Refresh Discord access' : 'Link Discord in Profile';
+    const title = linked ? 'Discord is linked, but access needs to be refreshed before server controls can load.' : 'Discord is required before bot dashboard controls can load.';
+    return `<div class="empty-server-v25"><p class="dashboard-discord-gate-note-v36">${esc(title)}</p><div class="dashboard-action-row-v25"><a class="btn btn-primary" href="/profile.html">${esc(label)}</a></div></div>`;
+  }
+  function renderNoServers(note, state = {}){
     configPanel.hidden = true;
-    const linked = hasDiscordLinked(currentUser || localProfile());
-    const fallbackNote = linked
-      ? 'Discord is linked, but no manageable servers were loaded. Refresh Discord access or invite Dark Bot to a guild.'
-      : 'Link Discord in Profile to manage servers and bot options.';
-    serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord Bot Control</span><h2>${linked ? 'Discord access needed' : 'Discord not connected'}</h2><p>${esc(note || fallbackNote)}</p></div>${inviteButtonHtml()}</div><div class="empty-server-v25"><div class="dashboard-action-row-v25">${discordProfileActionHtml()}</div></div>`;
+    const linked = state.hasDiscord ?? hasDiscordLinked();
+    const heading = linked ? 'Discord access needs refresh' : 'Discord is not linked';
+    const fallback = linked ? 'Refresh Discord access in your Profile to load manageable servers and bot options.' : 'Link Discord in your Profile to load manageable servers and bot options.';
+    serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord Bot Control</span><h2>${esc(state.heading || heading)}</h2><p>${esc(note || fallback)}</p></div>${inviteButtonHtml()}</div>${noServersActionHtml({ hasDiscord: linked })}`;
     wireInvite();
   }
   function renderServers(guilds, note){
@@ -343,7 +345,14 @@
       if (data.user) window.DGAuth?.setProfile?.(data.user);
       if (data.botInvite) currentInvite = data.botInvite;
       renderUser(currentUser);
-      renderServers(data.managedServers || [], data.managedServersNote);
+      if (data.needsDiscordLink || data.needsDiscordRefresh) {
+        renderNoServers(data.managedServersNote, {
+          hasDiscord: !data.needsDiscordLink,
+          heading: data.needsDiscordRefresh ? 'Refresh Discord access' : 'Discord is not linked'
+        });
+      } else {
+        renderServers(data.managedServers || [], data.managedServersNote);
+      }
       try {
         const statsData = await fetchJson('/api/stats', { headers: { Authorization: 'Bearer ' + t } }, 4200);
         if (statsData?.stats) { currentStats = statsData.stats; renderUser(currentUser); }

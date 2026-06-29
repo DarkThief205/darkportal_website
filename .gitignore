@@ -1,7 +1,9 @@
 .env
+.env.*
+!.env.example
 node_modules/
 dg.sqlite3
-*.sqlite
-*.db
-npm-debug.log*
+*.sqlite3
+.netlify/
 .DS_Store
+npm-debug.log*

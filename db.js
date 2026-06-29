@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const dbPath = process.env.SQLITE_DB_PATH || (process.env.NETLIFY_SERVERLESS === 'true' ? path.join('/tmp', 'dg.sqlite3') : path.join(__dirname, 'dg.sqlite3'));
+const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const dbPath = process.env.DATABASE_PATH || (isServerless ? path.join('/tmp', 'dark-portal-dg.sqlite3') : path.join(__dirname, 'dg.sqlite3'));
 const db = new sqlite3.Database(dbPath);
 
 function init() {

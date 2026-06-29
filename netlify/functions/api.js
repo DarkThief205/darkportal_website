@@ -1,119 +1,115 @@
 const http = require('http');
-const { Duplex } = require('stream');
-const { app, dbReady } = require('../../server');
+const app = require('../../server');
 
-class FakeSocket extends Duplex {
-  _read() {}
-  _write(chunk, encoding, callback) { callback(); }
-}
+let serverPromise;
 
-function normalizeHeaders(headers = {}) {
-  const out = {};
-  for (const [key, value] of Object.entries(headers || {})) {
-    if (typeof value !== 'undefined' && value !== null) out[key.toLowerCase()] = String(value);
-  }
-  return out;
-}
+function startServer() {
+  if (serverPromise) return serverPromise;
 
-function buildUrl(event) {
-  const host = event.headers?.host || event.headers?.Host || 'localhost';
-  const raw = event.rawUrl || event.raw_url || `https://${host}${event.path || '/'}`;
-  let url;
-  try { url = new URL(raw); }
-  catch { url = new URL(`https://${host}${event.path || '/'}`); }
-
-  let pathname = url.pathname || '/';
-  pathname = pathname.replace(/^\/\.netlify\/functions\/api(?=\/|$)/, '') || '/';
-
-  // Netlify redirects preserve the query string in rawUrl. If the fallback path was built
-  // from event.path, append queryStringParameters manually.
-  if (!url.search && event.queryStringParameters && Object.keys(event.queryStringParameters).length) {
-    const qs = new URLSearchParams();
-    for (const [key, value] of Object.entries(event.queryStringParameters)) {
-      if (Array.isArray(value)) value.forEach(v => qs.append(key, v));
-      else if (value !== undefined && value !== null) qs.append(key, value);
-    }
-    return `${pathname}?${qs.toString()}`;
-  }
-  return `${pathname}${url.search || ''}`;
-}
-
-function createRequest(event) {
-  const bodyBuffer = event.body
-    ? Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8')
-    : Buffer.alloc(0);
-
-  const req = new http.IncomingMessage(new FakeSocket());
-  req.url = buildUrl(event);
-  req.method = event.httpMethod || event.requestContext?.http?.method || 'GET';
-  req.headers = normalizeHeaders(event.headers);
-  req.rawHeaders = Object.entries(req.headers).flatMap(([k, v]) => [k, v]);
-  req.connection = req.socket;
-
-  if (bodyBuffer.length && !req.headers['content-length']) req.headers['content-length'] = String(bodyBuffer.length);
-
-  process.nextTick(() => {
-    if (bodyBuffer.length) req.push(bodyBuffer);
-    req.push(null);
-  });
-
-  return req;
-}
-
-function runExpress(event) {
-  return new Promise((resolve) => {
-    const req = createRequest(event);
-    const res = new http.ServerResponse(req);
-    const chunks = [];
-    const socket = new FakeSocket();
-
-    socket.writable = true;
-    res.assignSocket(socket);
-
-    res.write = function write(chunk, encoding, callback) {
-      if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
-      if (typeof encoding === 'function') encoding();
-      if (typeof callback === 'function') callback();
-      return true;
-    };
-
-    res.end = function end(chunk, encoding, callback) {
-      if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding));
-      const headers = res.getHeaders();
-      const body = Buffer.concat(chunks);
-      res.finished = true;
-      res.writableEnded = true;
-      if (typeof encoding === 'function') encoding();
-      if (typeof callback === 'function') callback();
-      resolve({
-        statusCode: res.statusCode || 200,
-        headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, Array.isArray(v) ? v.join(', ') : String(v)])),
-        body: body.toString('utf8'),
-        isBase64Encoded: false
-      });
-      return res;
-    };
-
-    app(req, res, (err) => {
-      if (err) {
-        console.error(err);
-        return resolve({ statusCode: 500, body: JSON.stringify({ error: 'Internal server error' }), headers: { 'content-type': 'application/json' } });
-      }
-      return resolve({ statusCode: 404, body: JSON.stringify({ error: 'Not found' }), headers: { 'content-type': 'application/json' } });
+  serverPromise = new Promise((resolve, reject) => {
+    const server = http.createServer(app);
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({ server, port: address.port });
     });
   });
+
+  return serverPromise;
 }
 
-exports.handler = async (event) => {
+function normalizePath(event) {
+  let pathname = event.path || event.rawPath || '/';
+
   try {
-    await dbReady;
-    return await runExpress(event);
-  } catch (err) {
-    console.error('Netlify function failed:', err);
-    return {
-      statusCode: 500,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ error: 'Function failed to start' })
-    };
+    if (event.rawUrl) pathname = new URL(event.rawUrl).pathname;
+  } catch (_) {}
+
+  const functionPrefix = '/.netlify/functions/api';
+  if (pathname.startsWith(functionPrefix)) {
+    pathname = pathname.slice(functionPrefix.length) || '/';
   }
+
+  if (!pathname.startsWith('/')) pathname = `/${pathname}`;
+  return pathname;
+}
+
+function buildQueryString(event) {
+  if (typeof event.rawQuery === 'string' && event.rawQuery) return event.rawQuery;
+
+  const multi = event.multiValueQueryStringParameters || {};
+  const single = event.queryStringParameters || {};
+  const params = new URLSearchParams();
+
+  for (const [key, values] of Object.entries(multi)) {
+    if (Array.isArray(values)) {
+      values.forEach((value) => params.append(key, value));
+    }
+  }
+
+  for (const [key, value] of Object.entries(single)) {
+    if (!params.has(key) && value != null) params.append(key, value);
+  }
+
+  return params.toString();
+}
+
+function buildHeaders(event) {
+  const headers = { ...(event.headers || {}) };
+  const originalHost = headers.host || headers.Host || headers['x-forwarded-host'] || headers['X-Forwarded-Host'];
+
+  delete headers.connection;
+  delete headers.Connection;
+  delete headers['content-length'];
+  delete headers['Content-Length'];
+  delete headers['accept-encoding'];
+  delete headers['Accept-Encoding'];
+
+  if (originalHost) headers.host = originalHost;
+  headers['x-forwarded-proto'] = headers['x-forwarded-proto'] || headers['X-Forwarded-Proto'] || 'https';
+
+  return headers;
+}
+
+function isTextResponse(headers) {
+  const contentType = String(headers.get('content-type') || '').toLowerCase();
+  return (
+    contentType.startsWith('text/') ||
+    contentType.includes('json') ||
+    contentType.includes('javascript') ||
+    contentType.includes('xml') ||
+    contentType.includes('svg') ||
+    contentType.includes('x-www-form-urlencoded')
+  );
+}
+
+exports.handler = async function handler(event) {
+  const { port } = await startServer();
+  const pathname = normalizePath(event);
+  const query = buildQueryString(event);
+  const url = `http://127.0.0.1:${port}${pathname}${query ? `?${query}` : ''}`;
+  const method = event.httpMethod || event.requestContext?.http?.method || 'GET';
+  const hasBody = !['GET', 'HEAD'].includes(method.toUpperCase()) && event.body != null;
+
+  const response = await fetch(url, {
+    method,
+    headers: buildHeaders(event),
+    body: hasBody ? (event.isBase64Encoded ? Buffer.from(event.body || '', 'base64') : event.body) : undefined,
+    redirect: 'manual',
+  });
+
+  const responseHeaders = {};
+  response.headers.forEach((value, key) => {
+    if (!['content-length', 'transfer-encoding'].includes(key.toLowerCase())) responseHeaders[key] = value;
+  });
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const textResponse = isTextResponse(response.headers);
+
+  return {
+    statusCode: response.status,
+    headers: responseHeaders,
+    body: textResponse ? buffer.toString('utf8') : buffer.toString('base64'),
+    isBase64Encoded: !textResponse,
+  };
 };

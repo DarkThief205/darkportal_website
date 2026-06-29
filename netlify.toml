@@ -1,29 +1,33 @@
 [build]
-  publish = "."
+  publish = "public"
   functions = "netlify/functions"
-  command = "npm run netlify-build"
 
 [functions]
   node_bundler = "esbuild"
+  included_files = ["db.js", "server.js", "routes/**"]
   external_node_modules = ["sqlite3"]
-  included_files = ["routes/**", "assets/**", "*.html", "*.css", "*.js"]
 
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/server/api/:splat"
+  to = "/.netlify/functions/api/api/:splat"
   status = 200
 
 [[redirects]]
   from = "/auth/*"
-  to = "/.netlify/functions/server/auth/:splat"
+  to = "/.netlify/functions/api/auth/:splat"
   status = 200
 
 [[redirects]]
   from = "/bot-invite"
-  to = "/.netlify/functions/server/bot-invite"
+  to = "/.netlify/functions/api/bot-invite"
   status = 200
 
 [[redirects]]
   from = "/support-invite"
-  to = "/.netlify/functions/server/support-invite"
+  to = "/.netlify/functions/api/support-invite"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200

@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-
 Sitemap: https://darkportal.is-a.dev/sitemap.xml
