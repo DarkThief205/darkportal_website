@@ -58,7 +58,11 @@
     try {
       const res = await fetch(url, { ...options, signal: t.controller.signal, cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+      if (!res.ok) {
+        const err = new Error(data.error || data.message || `Request failed (${res.status})`);
+        err.status = res.status;
+        throw err;
+      }
       return data;
     } finally { t.done(); }
   }
@@ -105,6 +109,66 @@
   }
   function wireInvite(){ const btn = document.getElementById('dashInviteBot'); if (btn) btn.href = currentInvite || '/bot-invite'; }
 
+  const DASHBOARD_DISCORD_AUTH_KEY = 'dark_portal_dashboard_discord_auth_started_at';
+  function discordAuthFallbackUrl(next = '/dashboard.html'){
+    return `/auth/discord?next=${encodeURIComponent(next)}`;
+  }
+  function autoDiscordAuthRecentlyStarted(){
+    try {
+      const last = Number(sessionStorage.getItem(DASHBOARD_DISCORD_AUTH_KEY) || 0);
+      return last && Date.now() - last < 120000;
+    } catch { return false; }
+  }
+  function rememberAutoDiscordAuth(){
+    try { sessionStorage.setItem(DASHBOARD_DISCORD_AUTH_KEY, String(Date.now())); } catch {}
+  }
+  async function discordAuthorizationUrl(){
+    const fallback = discordAuthFallbackUrl('/dashboard.html');
+    const t = token();
+    if (!t) return fallback;
+    try {
+      const data = await fetchJson('/api/profile/link-intent/discord?next=/dashboard.html', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + t }
+      }, 4200);
+      return data.url || fallback;
+    } catch { return fallback; }
+  }
+  function renderDiscordRedirect(reason){
+    configPanel.hidden = true;
+    serverList.hidden = false;
+    serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord authorization</span><h2>Refreshing Discord access...</h2><p>${esc(reason || 'Redirecting to Discord so the dashboard can reload your manageable servers.')}</p></div>${inviteButtonHtml()}</div><div class="empty-server-v25"><p class="dashboard-discord-gate-note-v36">You will be sent to Discord automatically. If nothing happens, use the button below.</p><div class="dashboard-action-row-v25"><a class="btn btn-primary" data-discord-auth href="${esc(discordAuthFallbackUrl('/dashboard.html'))}">Continue to Discord</a><a class="btn btn-ghost" href="/profile.html">Open Profile</a></div></div>`;
+    wireInvite();
+    wireDiscordAuthButtons();
+  }
+  async function startDiscordAuthorization(reason){
+    if (autoDiscordAuthRecentlyStarted()) return false;
+    rememberAutoDiscordAuth();
+    renderDiscordRedirect(reason);
+    const url = await discordAuthorizationUrl();
+    setTimeout(() => { window.location.assign(url); }, 250);
+    return true;
+  }
+  function wireDiscordAuthButtons(){
+    document.querySelectorAll('[data-discord-auth]').forEach((btn) => {
+      if (btn.dataset.discordAuthWired) return;
+      btn.dataset.discordAuthWired = 'true';
+      btn.addEventListener('click', async (event) => {
+        event.preventDefault();
+        const previous = btn.textContent;
+        btn.textContent = 'Opening Discord...';
+        btn.setAttribute('aria-busy', 'true');
+        try {
+          window.location.href = await discordAuthorizationUrl();
+        } catch {
+          btn.textContent = previous || 'Continue to Discord';
+          btn.removeAttribute('aria-busy');
+          window.location.href = discordAuthFallbackUrl('/dashboard.html');
+        }
+      });
+    });
+  }
+
   function renderUser(u){
     currentUser = u || currentUser;
     if (!u) {
@@ -124,9 +188,9 @@
   }
   function noServersActionHtml(state = {}){
     const linked = state.hasDiscord ?? hasDiscordLinked();
-    const label = linked ? 'Refresh Discord access' : 'Link Discord in Profile';
+    const label = linked ? 'Refresh Discord access' : 'Link Discord';
     const title = linked ? 'Discord is linked, but access needs to be refreshed before server controls can load.' : 'Discord is required before bot dashboard controls can load.';
-    return `<div class="empty-server-v25"><p class="dashboard-discord-gate-note-v36">${esc(title)}</p><div class="dashboard-action-row-v25"><a class="btn btn-primary" href="/profile.html">${esc(label)}</a></div></div>`;
+    return `<div class="empty-server-v25"><p class="dashboard-discord-gate-note-v36">${esc(title)}</p><div class="dashboard-action-row-v25"><a class="btn btn-primary" data-discord-auth href="${esc(discordAuthFallbackUrl('/dashboard.html'))}">${esc(label)}</a><a class="btn btn-ghost" href="/profile.html">Open Profile</a></div></div>`;
   }
   function renderNoServers(note, state = {}){
     configPanel.hidden = true;
@@ -135,6 +199,7 @@
     const fallback = linked ? 'Refresh Discord access in your Profile to load manageable servers and bot options.' : 'Link Discord in your Profile to load manageable servers and bot options.';
     serverList.innerHTML = `<div class="dashboard-section-head-v25 dashboard-section-head-v28 dashboard-section-head-v29"><div><span class="portal-mini-label">Discord Bot Control</span><h2>${esc(state.heading || heading)}</h2><p>${esc(note || fallback)}</p></div>${inviteButtonHtml()}</div>${noServersActionHtml({ hasDiscord: linked })}`;
     wireInvite();
+    wireDiscordAuthButtons();
   }
   function renderServers(guilds, note){
     currentServers = Array.isArray(guilds) ? guilds : [];
@@ -346,7 +411,9 @@
       if (data.botInvite) currentInvite = data.botInvite;
       renderUser(currentUser);
       if (data.needsDiscordLink || data.needsDiscordRefresh) {
-        renderNoServers(data.managedServersNote, {
+        const authStarted = await startDiscordAuthorization(data.managedServersNote || 'Discord authorization is required before the dashboard can load your manageable servers.');
+        if (authStarted) return;
+        renderNoServers(data.managedServersNote || 'Automatic Discord authorization was already attempted. Use the button below to try again.', {
           hasDiscord: !data.needsDiscordLink,
           heading: data.needsDiscordRefresh ? 'Refresh Discord access' : 'Discord is not linked'
         });
@@ -358,6 +425,11 @@
         if (statsData?.stats) { currentStats = statsData.stats; renderUser(currentUser); }
       } catch {}
     } catch (err) {
+      const shouldRefreshDiscord = err.status === 401 || err.status === 403 || /discord|unauthorized|refresh|token/i.test(err.message || '');
+      if (shouldRefreshDiscord) {
+        const authStarted = await startDiscordAuthorization('The dashboard could not load server data, so Discord access is being refreshed.');
+        if (authStarted) return;
+      }
       renderNoServers(err.name === 'AbortError' ? 'Dashboard API took too long. Restart the site server or refresh Discord login.' : (err.message || 'Could not load dashboard.'));
       renderUser(localProfile() || null);
     }

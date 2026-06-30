@@ -1072,7 +1072,7 @@ app.post('/api/profile/link-intent/:provider', getBearerUser, async (req, res) =
     const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const link = createProviderLinkToken(provider, user.id);
-    const params = new URLSearchParams({ next: '/profile.html', link });
+    const params = new URLSearchParams({ next: safeRedirect(req.query.next || '/profile.html'), link });
     res.json({ ok: true, provider, url: `/auth/${provider}?${params.toString()}` });
   } catch (err) {
     console.error('profile link intent error', err);
