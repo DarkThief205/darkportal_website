@@ -1,35 +1,28 @@
-# Netlify environment variables
+# Netlify Environment Variables
 
-Copy your local `.env` values into Netlify:
+Add these in Netlify → Site configuration → Environment variables.
+Do not upload `.env` to Netlify.
 
-Site configuration → Environment variables → Add variable
+Required for Discord login:
 
-Recommended variables to check:
-- `JWT_SECRET`
-- `SESSION_SECRET`
-- `DISCORD_CLIENT_ID`
-- `DISCORD_CLIENT_SECRET`
-- `DISCORD_REDIRECT_URI`
-- `DISCORD_BOT_INVITE`
-- `DISCORD_BOT_STATUS_URL`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_REDIRECT_URI`
-- `STEAM_API_KEY`
-- `BASE_URL`
-- any database/mail variables your project uses
+- `BASE_URL=https://darkportal.is-a.dev`
+- `PUBLIC_CANONICAL_ORIGIN=https://darkportal.is-a.dev`
+- `DISCORD_CLIENT_ID=your_discord_app_client_id`
+- `DISCORD_CLIENT_SECRET=your_discord_app_client_secret`
+- `DISCORD_REDIRECT_URI=https://darkportal.is-a.dev/auth/discord/callback`
+- `JWT_SECRET=use_a_long_random_secret`
 
-Do not paste private secrets into public GitHub repositories.
+Required for dashboard ↔ bot sync:
 
-## Added for domain/session consistency
-Set this in production so every secondary domain redirects to the same canonical origin and the browser keeps one shared session origin:
+- `DISCORD_BOT_STATUS_URL=https://your-wispbyte-bot-domain/status`
+- `BOT_DASHBOARD_URL=https://your-wispbyte-bot-domain`
+- `DASHBOARD_SHARED_SECRET=same_secret_as_the_bot`
 
-```env
-PUBLIC_CANONICAL_ORIGIN=https://darkportal.is-a.dev
-```
+Optional:
 
-Keep localhost `.env` blank for this value while developing locally.
+- `SUPPORT_INVITE_URL=https://discord.gg/yourInvite`
+- `DISCORD_BOT_INVITE=https://discord.com/oauth2/authorize?client_id=963487472300482560`
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`
+- `STEAM_API_KEY`, `STEAM_RETURN_URL`, `STEAM_REALM`
 
-## Bot connection
-
-See `BOT_CONNECTION_NOTES.md`. For production, `DISCORD_BOT_STATUS_URL` must point to a bot status endpoint reachable from the website backend. `http://127.0.0.1:3001/status` is only valid when both processes run on the same host/container.
+The Netlify version uses a pure-JS `/tmp` JSON store instead of native sqlite3, because native sqlite3 can crash Netlify Functions.
