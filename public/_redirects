@@ -1,4 +1,4 @@
-/api/*  /.netlify/functions/api/api/:splat  200!
+/api/* /.netlify/functions/api/api/:splat 200!
 /auth/* /.netlify/functions/api/auth/:splat 200!
 /bot-invite /.netlify/functions/api/bot-invite 200!
 /support-invite /.netlify/functions/api/support-invite 200!

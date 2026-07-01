@@ -1,11 +1,10 @@
 [build]
-  command = "npm install && npm run build"
+  command = "npm run build"
   publish = "public"
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["sqlite3"]
   included_files = ["server.js", "db.js", "routes/**", "public/**"]
 
 [[redirects]]
