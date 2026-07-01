@@ -7,6 +7,15 @@
   if (!hero || !cols) return;
 
   function localProfile(){ try { return window.DGAuth?.currentProfile?.() || JSON.parse(localStorage.getItem('dg_profile') || 'null'); } catch { return null; } }
+  const STATS_DISCORD_AUTH_KEY = 'dark_portal_stats_discord_auth_started_at';
+  function authUrl(){ return `/auth/discord?next=${encodeURIComponent('/stats.html')}`; }
+  function authRecentlyStarted(){ try { const last = Number(sessionStorage.getItem(STATS_DISCORD_AUTH_KEY) || 0); return last && Date.now() - last < 120000; } catch { return false; } }
+  function startDiscordAuth(){
+    if (authRecentlyStarted()) return false;
+    try { sessionStorage.setItem(STATS_DISCORD_AUTH_KEY, String(Date.now())); } catch {}
+    window.location.assign(authUrl());
+    return true;
+  }
   function num(v){ return Number(v || 0); }
   function gamePlayed(g){ return num(g?.wins) + num(g?.losses) + num(g?.draws); }
   function normKey(k){ return String(k || '').toLowerCase(); }
@@ -39,7 +48,7 @@
 
     const tttBody = `${row('Played', gamePlayed(ttt))}${row('Wins', num(ttt.wins))}${row('Losses', num(ttt.losses))}${row('Draws', num(ttt.draws))}${row('XP', num(ttt.xp), 'Local, bot, room-code and difficulty splits are prepared for the next telemetry pass.')}`;
     const sudokuBody = sudokuList.length ? sudokuList.map(g => row(g.game_key, `${num(g.wins)} solved`, `${num(g.xp)} XP`)).join('') + row('Most played difficulty', 'Coming soon', 'Easy / Medium / Hard / Extreme split will appear after detailed puzzle telemetry.') : row('No puzzles yet', '0 solved', 'Classic Sudoku and Sum-Doku will appear here.');
-    const wordleBody = `${row('Played', gamePlayed(wordle))}${row('Words solved', num(wordle.wins))}${row('Failed attempts', num(wordle.losses))}${row('Status', 'Under development', 'Wordle stats will be tracked when the game goes live.')}`;
+    const wordleBody = `${row('Played', gamePlayed(wordle))}${row('Words solved', num(wordle.wins))}${row('Failed attempts', num(wordle.losses))}${row('Best score', num(wordle.best_score), 'Daily and Infinite Challenge Wordle sync here when you are logged in.')}${row('XP', num(wordle.xp))}`;
 
     cols.innerHTML = `
       <section class="stats-section-v29 stats-section-v30"><div class="stats-section-head-v29 stats-section-head-v30"><span class="portal-mini-label">Games</span><h2>Game activity</h2><p>Total ${totalPlayed} games • ${totalWins} wins • ${totalLosses} losses • ${totalDraws} draws</p></div><div class="stats-summary-strip-v30"><div><b>${totalPlayed}</b><span>Total</span></div><div><b>${totalWins}</b><span>Wins</span></div><div><b>${totalLosses}</b><span>Losses</span></div><div><b>${totalDraws}</b><span>Draws</span></div></div><div class="stats-accordion-list-v29 stats-accordion-list-v30">${detailsBlock('stat-ttt','Tic-Tac-Toe',`${gamePlayed(ttt)} played • ${num(ttt.wins)} wins`,tttBody)}${detailsBlock('stat-sudoku','Sudoku / Sum-Doku',`${sudokuPlayed} played • ${sudokuWins} solved • ${sudokuXp} XP`,sudokuBody)}${detailsBlock('stat-wordle','Wordle',`${gamePlayed(wordle)} played`,wordleBody)}</div></section>
@@ -65,7 +74,7 @@
     const saved = localProfile();
     if (saved) render({ user: saved, stats: { progression: { level: 1, xp: 0, percent: 0, intoLevel:0, needed:120 }, totals: {} } });
     if (!token && !saved) { window.location.href = '/login.html?next=/stats.html'; return; }
-    if (!token) return;
+    if (!token) { startDiscordAuth(); return; }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
@@ -75,6 +84,8 @@
       if (data.user) window.DGAuth?.setProfile?.(data.user);
       render(data);
     } catch(err) {
+      const shouldRefreshDiscord = /discord|unauthorized|refresh|token/i.test(err.message || '') || err.message === 'Unauthorized';
+      if (shouldRefreshDiscord && startDiscordAuth()) return;
       if (!saved) renderError(err.name === 'AbortError' ? 'Stats API timed out.' : err.message);
     } finally { clearTimeout(timer); }
   }

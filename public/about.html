@@ -1,17 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    (function() {
+      var canonical = "https://darkportal.is-a.dev";
+      var local = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+      if (!local && location.protocol !== 'file:' && canonical && location.origin !== canonical) {
+        location.replace(canonical + location.pathname + location.search + location.hash);
+      }
+    })();
+  </script>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-WL7BWTLD');</script>
+  })(window,document,'script','dataLayer',"GTM-WL7BWTLD");</script>
   <!-- End Google Tag Manager -->
+  <link rel="icon" href="/favicon.ico?v=v51" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=v51" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=v51" />
+  <link rel="apple-touch-icon" href="/favicon-192x192.png?v=v51" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="application-name" content="Dark Portal" />
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>About Dark Portal</title>
-  <link rel="stylesheet" href="style.css?v=portal-v37" />
+  
+  <meta name="description" content="Learn more about DarkPortal and DarkBot tools for Discord servers." />
+  <link rel="canonical" href="https://darkportal.is-a.dev/about.html" />
+  <meta property="og:site_name" content="DarkPortal" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://darkportal.is-a.dev/about.html" />
+  <meta property="og:title" content="About Dark Portal" />
+  <meta property="og:description" content="Learn more about DarkPortal and DarkBot tools for Discord servers." />
+  <meta property="og:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:secure_url" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="DarkPortal DarkBot dashboard banner" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://darkportal.is-a.dev/about.html" />
+  <meta name="twitter:title" content="About Dark Portal" />
+  <meta name="twitter:description" content="Learn more about DarkPortal and DarkBot tools for Discord servers." />
+  <meta name="twitter:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta name="theme-color" content="#7a35ff" />
+<link rel="stylesheet" href="style.css?v=portal-v51" />
 </head>
 
 <body class="dark portal-home portal-about-page-body">
@@ -19,6 +55,7 @@
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL7BWTLD"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
+
   <div id="portalFallingLayer" class="portal-falling-layer" aria-hidden="true"></div>
 
   <header class="unified-topbar home-topbar" aria-label="Dark Portal navigation">
@@ -45,7 +82,7 @@
       <div class="portal-about-hero-v14">
         <div class="portal-about-title-v14">
           <div class="portal-kicker"><span></span> About Dark Portal</div>
-          <h1 id="aboutTitle">Learn about <span class="gradient-text">Dark Services</span></h1>
+          <h1 id="aboutTitle">Learn about<br><span class="gradient-text">Dark Services</span></h1>
         </div>
 
         <aside class="portal-status-panel-v14" aria-labelledby="serversStatusTitle">
@@ -106,8 +143,8 @@
           <h2 id="policyTitle">Terms & Privacy</h2>
           <p>Read the basic rules for using Dark Portal and how account data is handled.</p>
           <div class="portal-policy-actions-v14">
-            <button type="button" data-policy-modal="terms">Terms of Service</button>
-            <button type="button" data-policy-modal="privacy">Privacy Policy</button>
+            <a href="/terms.html">Terms of Service</a>
+            <a href="/privacy.html">Privacy Policy</a>
           </div>
         </section>
       </div>
@@ -176,6 +213,6 @@
       document.addEventListener('keydown', (event) => { if(event.key === 'Escape' && modal && !modal.hidden) closePolicy(); });
     })();
   </script>
-  <script src="common.js?v=portal-v37"></script>
+  <script src="common.js?v=portal-v51"></script>
 </body>
 </html>

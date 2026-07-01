@@ -194,7 +194,7 @@ window.DGAuth = {
 
 // Redirect account-only navigation directly to the existing account creation/login menu.
 (function initProtectedNavigation(){
-  const protectedPaths = new Set(['/dashboard.html', '/stats.html', '/profile.html']);
+  const protectedPaths = new Set(['/dashboard.html', '/server-config.html', '/stats.html', '/profile.html']);
   function isProtectedHref(href){
     try {
       const url = new URL(href, window.location.origin);

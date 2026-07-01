@@ -1,17 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    (function() {
+      var canonical = "https://darkportal.is-a.dev";
+      var local = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+      if (!local && location.protocol !== 'file:' && canonical && location.origin !== canonical) {
+        location.replace(canonical + location.pathname + location.search + location.hash);
+      }
+    })();
+  </script>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-WL7BWTLD');</script>
+  })(window,document,'script','dataLayer',"GTM-WL7BWTLD");</script>
   <!-- End Google Tag Manager -->
+  <link rel="icon" href="/favicon.ico?v=v51" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=v51" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=v51" />
+  <link rel="apple-touch-icon" href="/favicon-192x192.png?v=v51" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="application-name" content="Dark Portal" />
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dark Portal</title>
-  <link rel="stylesheet" href="style.css?v=portal-v37" />
+  <title>Dark Portal — Discord Bot Dashboard & Browser Games</title>
+  
+  <meta name="description" content="DarkPortal is the home of DarkBot: manage Discord server tools, configure plugins, open games and control your bot dashboard in one portal." />
+  <link rel="canonical" href="https://darkportal.is-a.dev/" />
+  <meta property="og:site_name" content="DarkPortal" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://darkportal.is-a.dev/" />
+  <meta property="og:title" content="Dark Portal — Discord Bot Dashboard &amp; Browser Games" />
+  <meta property="og:description" content="DarkPortal is the home of DarkBot: manage Discord server tools, configure plugins, open games and control your bot dashboard in one portal." />
+  <meta property="og:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:secure_url" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="DarkPortal DarkBot dashboard banner" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://darkportal.is-a.dev/" />
+  <meta name="twitter:title" content="Dark Portal — Discord Bot Dashboard &amp; Browser Games" />
+  <meta name="twitter:description" content="DarkPortal is the home of DarkBot: manage Discord server tools, configure plugins, open games and control your bot dashboard in one portal." />
+  <meta name="twitter:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta name="theme-color" content="#7a35ff" />
+<link rel="stylesheet" href="style.css?v=portal-v56" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Dark Portal",
+    "alternateName": ["Dark Portal", "Dark Bot Portal"],
+    "url": "https://darkportal.is-a.dev/",
+    "description": "Discord bot dashboard, server tools, account profiles, stats and browser games."
+  }
+  </script>
 </head>
 
 <body class="dark portal-home">
@@ -19,6 +66,7 @@
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL7BWTLD"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
+
   <div id="portalFallingLayer" class="portal-falling-layer" aria-hidden="true"></div>
 
   <header class="unified-topbar home-topbar" aria-label="Dark Portal navigation">
@@ -45,7 +93,8 @@
       <div class="portal-home-head portal-home-head-v10">
         <div class="portal-hero-copy portal-hero-v10">
           <div class="portal-kicker"><span></span> Dark Portal</div>
-          <h1 id="portalHomeTitle">Welcome to Dark Portal</h1>
+          <h1 id="portalHomeTitle">Welcome to the<br><span class="darkportal-wordmark">Dark Portal</span></h1>
+          <p class="portal-home-subline-v40">Dark Bot tools, server controls and browser games in one portal.</p>
         </div>
 
         <a class="portal-invite-bubble portal-invite-bubble-v13" href="https://discord.com/oauth2/authorize?client_id=963487472300482560" target="_blank" rel="noreferrer" aria-label="Add Discord bot to guild">
@@ -63,10 +112,10 @@
         </a>
       </div>
 
-      <div class="portal-destination-grid portal-destination-grid-v10" aria-label="Portal destinations">
-        <a class="portal-destination-card portal-card-discord portal-card-v10" href="/dashboard.html">
+      <div class="portal-destination-grid portal-destination-grid-v10 portal-action-grid-v40" aria-label="Portal destinations">
+        <a class="portal-destination-card portal-card-discord portal-card-v10 portal-action-card-v40" href="/dashboard.html" aria-label="Open Discord Bot Control dashboard">
           <span class="portal-card-glow" aria-hidden="true"></span>
-          <span class="portal-card-icon" aria-hidden="true">
+          <span class="portal-card-icon portal-action-icon-v40" aria-hidden="true">
             <svg viewBox="0 0 64 64" focusable="false">
               <rect x="13" y="18" width="38" height="30" rx="12" fill="none" stroke="currentColor" stroke-width="5"/>
               <path d="M24 18v-6m16 6v-6" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
@@ -75,15 +124,13 @@
               <path d="M25 43h14" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
             </svg>
           </span>
-          <span class="portal-card-label">Guild tools</span>
-          <strong>Discord Bot Control</strong>
-          <small>Manage guild settings, commands, access and future Discord tools.</small>
-          <span class="portal-card-action">Open dashboard <b>→</b></span>
+          <span class="portal-action-title-v40">Discord Bot Control</span>
+          <span class="portal-card-action portal-action-cta-v40">Open dashboard <b>→</b></span>
         </a>
 
-        <a class="portal-destination-card portal-card-games portal-card-v10" href="/games.html">
+        <a class="portal-destination-card portal-card-games portal-card-v10 portal-action-card-v40" href="/games.html" aria-label="Open Dark Games">
           <span class="portal-card-glow" aria-hidden="true"></span>
-          <span class="portal-card-icon" aria-hidden="true">
+          <span class="portal-card-icon portal-action-icon-v40" aria-hidden="true">
             <svg viewBox="0 0 64 64" focusable="false">
               <rect x="10" y="14" width="44" height="36" rx="14" fill="none" stroke="currentColor" stroke-width="5"/>
               <path d="M22 32h12M28 26v12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
@@ -91,25 +138,21 @@
               <circle cx="47" cy="36" r="3" fill="currentColor"/>
             </svg>
           </span>
-          <span class="portal-card-label">Game arena</span>
-          <strong>Dark Games</strong>
-          <small>Play Sudoku, Sum-Doku, Tic-Tac-Toe, Wordle and new game modes.</small>
-          <span class="portal-card-action">Choose game <b>→</b></span>
+          <span class="portal-action-title-v40">Dark Games</span>
+          <span class="portal-card-action portal-action-cta-v40">Play now <b>→</b></span>
         </a>
 
-        <a class="portal-destination-card portal-card-about portal-card-v10" href="/about.html">
+        <a class="portal-destination-card portal-card-about portal-card-v10 portal-action-card-v40" href="/about.html" aria-label="Read about Dark Portal">
           <span class="portal-card-glow" aria-hidden="true"></span>
-          <span class="portal-card-icon" aria-hidden="true">
+          <span class="portal-card-icon portal-action-icon-v40" aria-hidden="true">
             <svg viewBox="0 0 64 64" focusable="false">
               <circle cx="32" cy="32" r="22" fill="none" stroke="currentColor" stroke-width="5"/>
               <path d="M32 28v17" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
               <circle cx="32" cy="20" r="3.5" fill="currentColor"/>
             </svg>
           </span>
-          <span class="portal-card-label">About</span>
-          <strong>About Dark</strong>
-          <small>See what Dark Portal is, how it is built, and what comes next.</small>
-          <span class="portal-card-action">Read more <b>→</b></span>
+          <span class="portal-action-title-v40">About Dark</span>
+          <span class="portal-card-action portal-action-cta-v40">Explore <b>→</b></span>
         </a>
       </div>
     </section>
@@ -119,6 +162,6 @@
     </footer>
   </main>
 
-  <script src="common.js?v=portal-v37"></script>
+  <script src="common.js?v=portal-v56"></script>
 </body>
 </html>

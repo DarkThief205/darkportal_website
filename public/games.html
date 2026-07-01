@@ -2,24 +2,61 @@
 
 <html lang="en">
 <head>
+  <script>
+    (function() {
+      var canonical = "https://darkportal.is-a.dev";
+      var local = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+      if (!local && location.protocol !== 'file:' && canonical && location.origin !== canonical) {
+        location.replace(canonical + location.pathname + location.search + location.hash);
+      }
+    })();
+  </script>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-WL7BWTLD');</script>
+  })(window,document,'script','dataLayer',"GTM-WL7BWTLD");</script>
   <!-- End Google Tag Manager -->
+  <link rel="icon" href="/favicon.ico?v=v51" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=v51" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=v51" />
+  <link rel="apple-touch-icon" href="/favicon-192x192.png?v=v51" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="application-name" content="Dark Portal" />
+
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <title>Dark Games</title>
-<link href="/style.css?v=portal-v37" rel="stylesheet"/>
-<link href="/games/_shared/games.css?v=portal-v30" rel="stylesheet"/>
+
+  <meta name="description" content="Open DarkPortal games including Tic-Tac-Toe, Sudoku and Wordle." />
+  <link rel="canonical" href="https://darkportal.is-a.dev/games.html" />
+  <meta property="og:site_name" content="DarkPortal" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://darkportal.is-a.dev/games.html" />
+  <meta property="og:title" content="Dark Games" />
+  <meta property="og:description" content="Open DarkPortal games including Tic-Tac-Toe, Sudoku and Wordle." />
+  <meta property="og:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:secure_url" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="DarkPortal DarkBot dashboard banner" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://darkportal.is-a.dev/games.html" />
+  <meta name="twitter:title" content="Dark Games" />
+  <meta name="twitter:description" content="Open DarkPortal games including Tic-Tac-Toe, Sudoku and Wordle." />
+  <meta name="twitter:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta name="theme-color" content="#7a35ff" />
+<link href="/style.css?v=portal-v51" rel="stylesheet"/>
+<link href="/games/_shared/games.css?v=portal-v51" rel="stylesheet"/>
 </head>
 <body class="games-body">
   <!-- Google Tag Manager (noscript) -->
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL7BWTLD"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
+
 <div aria-hidden="true" class="games-rain" id="gamesRain"></div>
 <header class="unified-topbar games-topbar" aria-label="Dark Portal navigation">
   <a class="unified-brand" href="/games.html" aria-label="Dark Games home">
@@ -134,9 +171,9 @@
 </svg>
 </div><span aria-hidden="true" class="game-icon-help-mark">?</span></button></div>
 <div class="game-content">
-<p class="game-kicker">Word puzzle</p>
+<p class="game-kicker">Daily / Infinite</p>
 <h2>Wordle</h2>
-<p>Guess the hidden word using tile clues after each attempt.</p>
+<p>Play the Daily Challenge or Infinite Challenge with animated clues, real-word validation and streaks.</p>
 </div>
 <div class="game-actions">
 <a class="game-action" href="/wordle.html">Play Now</a>
@@ -156,7 +193,7 @@
 <div class="game-help-body" id="gameHelpText"></div>
 </section>
 </div>
-<script src="/common.js?v=portal-v37"></script>
-<script src="/games/_shared/games.js?v=portal-v30"></script>
+<script src="/common.js?v=portal-v51"></script>
+<script src="/games/_shared/games.js?v=portal-v51"></script>
 </body>
 </html>

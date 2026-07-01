@@ -1,23 +1,60 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script>
+    (function() {
+      var canonical = "https://darkportal.is-a.dev";
+      var local = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+      if (!local && location.protocol !== 'file:' && canonical && location.origin !== canonical) {
+        location.replace(canonical + location.pathname + location.search + location.hash);
+      }
+    })();
+  </script>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-WL7BWTLD');</script>
+  })(window,document,'script','dataLayer',"GTM-WL7BWTLD");</script>
   <!-- End Google Tag Manager -->
+  <link rel="icon" href="/favicon.ico?v=v51" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=v51" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=v51" />
+  <link rel="apple-touch-icon" href="/favicon-192x192.png?v=v51" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="application-name" content="Dark Portal" />
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Login | Dark Portal</title>
-  <link rel="stylesheet" href="style.css?v=portal-v37">
+  
+  <meta name="description" content="Log in to DarkPortal to manage your Discord server dashboard and profile." />
+  <link rel="canonical" href="https://darkportal.is-a.dev/login.html" />
+  <meta property="og:site_name" content="DarkPortal" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://darkportal.is-a.dev/login.html" />
+  <meta property="og:title" content="Login | Dark Portal" />
+  <meta property="og:description" content="Log in to DarkPortal to manage your Discord server dashboard and profile." />
+  <meta property="og:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:secure_url" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="DarkPortal DarkBot dashboard banner" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://darkportal.is-a.dev/login.html" />
+  <meta name="twitter:title" content="Login | Dark Portal" />
+  <meta name="twitter:description" content="Log in to DarkPortal to manage your Discord server dashboard and profile." />
+  <meta name="twitter:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta name="theme-color" content="#7a35ff" />
+<link rel="stylesheet" href="style.css?v=portal-v51">
 </head>
 <body class="dark auth-page auth-page-provider">
   <!-- Google Tag Manager (noscript) -->
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL7BWTLD"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
+
   <div class="login-falling-layer" aria-hidden="true">
     <span style="--left:6%;--delay:-2s;--duration:22s;--size:23px;--drift:46px;--rotation:-10deg;--opacity:.18;--glow:rgba(123,66,255,.58);--color:#b78cff">👤</span>
     <span style="--left:16%;--delay:-11s;--duration:28s;--size:16px;--drift:-34px;--rotation:16deg;--opacity:.15;--glow:rgba(46,168,255,.52);--color:#8fd6ff">login</span>
@@ -117,7 +154,7 @@
     </section>
   </div>
 
-  <script src="common.js?v=portal-v37"></script>
-  <script src="auth.js?v=portal-v30"></script>
+  <script src="common.js?v=portal-v51"></script>
+  <script src="auth.js?v=portal-v51"></script>
 </body>
 </html>

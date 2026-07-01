@@ -1,41 +1,24 @@
-# Dark Portal — Netlify-ready package
+# Dark Portal deploy notes
 
-This version is laid out like a Netlify deploy:
+This ZIP contains the full Dark Portal site with the latest home-page 100% zoom fit fix, Google Search Console verification file, and dashboard Discord provider gate cleanup.
 
-- `public/` contains the static site files, assets, and games.
-- `netlify/functions/api.js` runs the Express backend as a Netlify Function.
-- `netlify.toml` routes `/api/*`, `/auth/*`, `/bot-invite`, and `/support-invite` to the function.
-- Backend files stay at the repo root: `server.js`, `db.js`, and `routes/`.
+## Important
+- `.env` is included because you requested a full ZIP with env for local testing.
+- Do not share this ZIP publicly if `.env` contains private secrets.
+- In Netlify, set the same variables from `.env` in Site configuration → Environment variables.
 
-## Deploy
-
-1. Upload this folder/ZIP to GitHub.
-2. Connect it to Netlify.
-3. In Netlify build settings, use:
-   - Build command: leave blank, or use `npm install` if your Netlify UI requires one.
-   - Publish directory: `public`
-   - Functions directory: `netlify/functions`
-4. Add the variables from `NETLIFY_ENV_REQUIRED.md` in Netlify environment variables.
-
-## Local test
-
+## Quick local test
 ```bash
 npm install
 npm start
 ```
+Then open the local URL shown by the server, usually `http://localhost:3000`.
 
-Then open `http://localhost:3000`.
+## Google verification
+After deploy, this file should load:
+`https://darkportal.is-a.dev/google92111987cc89c5cd.html`
 
-To test Netlify redirects/functions locally, install the Netlify CLI and run:
-
-```bash
-netlify dev
-```
-
-## Notes
-
-The uploaded source ZIP contained a real `.env` file. This Netlify-ready ZIP intentionally does **not** include `.env`; use `.env.example` and Netlify environment variables instead.
-
-SQLite in Netlify Functions writes to `/tmp` by default, which is temporary storage. Use a hosted database for production persistence.
-
-Google Search Console verification is included at `public/google92111987cc89c5cd.html`.
+## Dashboard behavior
+- Discord not linked to the current profile: dashboard shows “Link Discord in Profile”.
+- Discord is linked but access token is missing/expired: dashboard shows “Refresh Discord access”.
+- Server controls only load after Discord access is available.

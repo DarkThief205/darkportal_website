@@ -1,17 +1,53 @@
 <!DOCTYPE html>
 <html lang="en" class="sudoku-doc">
 <head>
+  <script>
+    (function() {
+      var canonical = "https://darkportal.is-a.dev";
+      var local = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+      if (!local && location.protocol !== 'file:' && canonical && location.origin !== canonical) {
+        location.replace(canonical + location.pathname + location.search + location.hash);
+      }
+    })();
+  </script>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-  })(window,document,'script','dataLayer','GTM-WL7BWTLD');</script>
+  })(window,document,'script','dataLayer',"GTM-WL7BWTLD");</script>
   <!-- End Google Tag Manager -->
+  <link rel="icon" href="/favicon.ico?v=v51" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=v51" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=v51" />
+  <link rel="apple-touch-icon" href="/favicon-192x192.png?v=v51" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="application-name" content="Dark Portal" />
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sudoku | Dark Games</title>
-  <link rel="stylesheet" href="style.css?v=portal-v37" />
+  
+  <meta name="description" content="Play Sudoku on DarkPortal." />
+  <link rel="canonical" href="https://darkportal.is-a.dev/sudoku.html" />
+  <meta property="og:site_name" content="DarkPortal" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://darkportal.is-a.dev/sudoku.html" />
+  <meta property="og:title" content="Sudoku | Dark Games" />
+  <meta property="og:description" content="Play Sudoku on DarkPortal." />
+  <meta property="og:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:secure_url" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="DarkPortal DarkBot dashboard banner" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://darkportal.is-a.dev/sudoku.html" />
+  <meta name="twitter:title" content="Sudoku | Dark Games" />
+  <meta name="twitter:description" content="Play Sudoku on DarkPortal." />
+  <meta name="twitter:image" content="https://darkportal.is-a.dev/og-banner.png" />
+  <meta name="theme-color" content="#7a35ff" />
+<link rel="stylesheet" href="style.css?v=portal-v51" />
 </head>
 
 <body class="dark sudoku-arena">
@@ -19,6 +55,7 @@
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WL7BWTLD"
   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
+
   <div id="sudokuFallingLayer" class="sudoku-falling-layer" aria-hidden="true">
     <span style="--left:4%;--delay:-2s;--duration:18s;--size:22px;--drift:42px;--rotation:-12deg;--opacity:.22;--glow:rgba(123,66,255,.65);--color:#a769ff">9</span>
     <span style="--left:13%;--delay:-8s;--duration:24s;--size:16px;--drift:-28px;--rotation:18deg;--opacity:.16;--glow:rgba(46,168,255,.58);--color:#78bdff">3×3</span>
@@ -176,19 +213,27 @@
               <p>Current puzzle</p>
               <h2 id="sudokuBoardTitle">Classic Sudoku</h2>
             </div>
-            <button id="sudokuChangeSetup" class="sudoku-gear-btn" type="button" aria-label="Change Sudoku setup" title="Back to setup / configure">
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M4 7h10"/>
-                <path d="M18 7h2"/>
-                <circle cx="16" cy="7" r="2"/>
-                <path d="M4 12h3"/>
-                <path d="M11 12h9"/>
-                <circle cx="9" cy="12" r="2"/>
-                <path d="M4 17h11"/>
-                <path d="M19 17h1"/>
-                <circle cx="17" cy="17" r="2"/>
-              </svg>
-            </button>
+            <div class="sudoku-head-actions-v48">
+              <button id="sudokuReplayPuzzle" class="sudoku-gear-btn sudoku-replay-btn-v48" type="button" aria-label="Replay puzzle" title="Replay puzzle">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M20 4v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button id="sudokuChangeSetup" class="sudoku-gear-btn" type="button" aria-label="Change Sudoku setup" title="Back to setup / configure">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 7h10"/>
+                  <path d="M18 7h2"/>
+                  <circle cx="16" cy="7" r="2"/>
+                  <path d="M4 12h3"/>
+                  <path d="M11 12h9"/>
+                  <circle cx="9" cy="12" r="2"/>
+                  <path d="M4 17h11"/>
+                  <path d="M19 17h1"/>
+                  <circle cx="17" cy="17" r="2"/>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div class="sudoku-match-tags">
@@ -294,6 +339,6 @@
     </div>
   </div>
 
-  <script src="script.js?v=portal-v34"></script>
+  <script src="script.js?v=portal-v51"></script>
 </body>
 </html>
