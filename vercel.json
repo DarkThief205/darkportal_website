@@ -1,0 +1,57 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{server.js,db.js,routes/**}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api",
+      "destination": "/api/index?__vercel_path=/api"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?__vercel_path=/api/:path*"
+    },
+    {
+      "source": "/auth",
+      "destination": "/api/index?__vercel_path=/auth"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "/api/index?__vercel_path=/auth/:path*"
+    },
+    {
+      "source": "/bot-invite",
+      "destination": "/api/index?__vercel_path=/bot-invite"
+    },
+    {
+      "source": "/support-invite",
+      "destination": "/api/index?__vercel_path=/support-invite"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/auth/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}

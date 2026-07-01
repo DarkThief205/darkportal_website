@@ -1,6 +1,6 @@
-// Netlify-safe lightweight DB adapter.
+// Serverless-safe lightweight DB adapter.
 // The original project used the native `sqlite3` package. Native sqlite binaries can
-// crash inside Netlify Functions with Runtime.ExitError / exit status 129. This adapter
+// crash inside serverless functions with Runtime.ExitError / exit status 129. This adapter
 // keeps the same small db.run/db.get/db.all surface used by the app, without native code.
 // Data is stored in /tmp while the function instance is warm. OAuth login itself is
 // durable via the signed JWT cookie/localStorage session created by server.js.
@@ -10,7 +10,7 @@ const crypto = require('crypto');
 
 const dbPath = process.env.DB_PATH && String(process.env.DB_PATH).trim()
   ? String(process.env.DB_PATH).trim()
-  : path.join('/tmp', 'darkportal-netlify-db.json');
+  : path.join('/tmp', 'darkportal-serverless-db.json');
 
 const defaultState = () => ({
   nextUserId: 1,
@@ -40,7 +40,7 @@ function saveState() {
     fs.writeFileSync(tmp, JSON.stringify(state));
     fs.renameSync(tmp, dbPath);
   } catch (err) {
-    // Netlify may recycle /tmp; the JWT session still keeps login functional.
+    // Serverless hosts may recycle /tmp; the JWT session still keeps login functional.
     console.warn('Netlify DB save warning:', err.message);
   }
 }

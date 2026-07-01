@@ -12,7 +12,8 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
-const BASE_URL = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || `http://localhost:${PORT}`;
+const VERCEL_DEPLOY_ORIGIN = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
+const BASE_URL = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || VERCEL_DEPLOY_ORIGIN || `http://localhost:${PORT}`;
 
 const CANONICAL_ORIGIN = process.env.ENFORCE_CANONICAL_ORIGIN === 'true' ? normalizeOrigin(process.env.PUBLIC_CANONICAL_ORIGIN || process.env.CANONICAL_ORIGIN || '') : '';
 
@@ -38,7 +39,7 @@ function requestOrigin(req) {
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
 const DISCORD_REDIRECT_URI_ENV = process.env.DISCORD_REDIRECT_URI || '';
-function appBaseUrl(req) { return normalizeOrigin(process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || '') || requestOrigin(req); }
+function appBaseUrl(req) { return normalizeOrigin(process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || VERCEL_DEPLOY_ORIGIN || '') || requestOrigin(req); }
 function discordRedirectUri(req) { return normalizeOrigin(DISCORD_REDIRECT_URI_ENV) ? DISCORD_REDIRECT_URI_ENV : `${appBaseUrl(req)}/auth/discord/callback`; }
 const DISCORD_BOT_INVITE = process.env.DISCORD_BOT_INVITE || '';
 const SUPPORT_INVITE_URL = process.env.SUPPORT_INVITE_URL || 'https://discord.gg/bJ8dqwSCuU';
