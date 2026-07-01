@@ -59,47 +59,83 @@
   function token(){ return localStorage.getItem('dg_token'); }
   function localProfile(){ try { return JSON.parse(localStorage.getItem('dg_profile') || 'null'); } catch { return null; } }
   function deepClone(v){ try { return JSON.parse(JSON.stringify(v || {})); } catch { return {}; } }
-  function staticManagedServers(){
+  function withTimeout(ms = 7000){ const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), ms); return { controller, done: () => clearTimeout(timer) }; }
+  async function fetchJson(url, options = {}, timeoutMs = 7000){
+    const t = withTimeout(timeoutMs);
     try {
-      const saved = JSON.parse(localStorage.getItem('dark_portal_static_servers') || 'null');
-      if (Array.isArray(saved) && saved.length) return saved;
-    } catch {}
-    return [{ id: '100000000000000001', name: 'Dark Portal Demo Server', owner: true, memberCount: 128, icon_url: '' }];
+      const res = await fetch(url, { ...options, signal: t.controller.signal, cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data.error || data.message || `Request failed (${res.status})`);
+        err.status = res.status;
+        throw err;
+      }
+      return data;
+    } finally { t.done(); }
   }
-  function staticGuildDashboard(guild){
-    const cfg = normalizeDashboardConfig(readGuildConfig(guild.id));
-    return {
-      guild,
-      manageableGuild: guild,
-      accessMode: guild.owner ? 'Owner' : 'Manage Server',
-      channels: { text: [
-        { id: '100000000000000101', name: 'general', canSendMessages: true },
-        { id: '100000000000000102', name: 'welcome', canSendMessages: true },
-        { id: '100000000000000103', name: 'logs', canSendMessages: true }
-      ] },
-      roles: [
-        { id: '100000000000000201', name: 'Member', editable: true },
-        { id: '100000000000000202', name: 'Verified', editable: true },
-        { id: '100000000000000203', name: 'Muted', editable: true }
-      ],
-      commands: fallbackCommands,
-      commandConfig: cfg.commands,
-      commandSettings: cfg.commands,
-      plugins: cfg.plugins,
-      owner: { name: 'Server Owner', username: 'owner', tag: 'owner#0001', avatar_url: '' },
-      access: { adminsAndManagers: [{ name: 'Server Owner', username: 'owner', role: 'Owner', tag: 'owner#0001', avatar_url: '' }], memberFetchComplete: true, note: 'Static Netlify demo data. Settings are saved in this browser only.' },
-      moderation: { bannedUsers: [], timedOutUsers: [], bansFetchComplete: true, timeoutsFetchComplete: true },
-      security: { verificationLevel: 'Medium', mfaLevel: 'Enabled for moderators', explicitContentFilter: 'Enabled', automodStatus: 'Static preview', note: 'Static demo values.' },
-      activity: { executedCommands: 0, note: 'Static Netlify build: no live bot telemetry.' }
-    };
+  const localBotDashboardBases = ['http://127.0.0.1:3001', 'http://localhost:3001'];
+  function mergeLocalBotSetup(botData, guild, previous = null){
+    const merged = { ...(botData || {}) };
+    merged.guild = merged.guild || previous?.guild || guild;
+    merged.accessMode = previous?.accessMode || (guild?.owner ? 'Owner' : 'Manage Server');
+    merged.manageableGuild = previous?.manageableGuild || guild;
+    delete merged.botEndpointError;
+    return merged;
+  }
+  async function fetchLocalBotDashboard(guild, timeoutMs = 4200){
+    let lastError = null;
+    for (const base of localBotDashboardBases) {
+      try {
+        const data = await fetchJson(`${base}/api/guild/${encodeURIComponent(guild.id)}/dashboard`, { mode: 'cors' }, timeoutMs);
+        if (data && typeof data === 'object') return mergeLocalBotSetup(data, guild);
+      } catch (error) { lastError = error; }
+    }
+    throw lastError || new Error('Local Dark Bot endpoint is not reachable.');
+  }
+  async function patchLocalBotPlugins(guildId, plugins, commands = {}, timeoutMs = 5200){
+    let lastError = null;
+    for (const base of localBotDashboardBases) {
+      try {
+        return await fetchJson(`${base}/api/guild/${encodeURIComponent(guildId)}/plugins`, {
+          method: 'PATCH',
+          mode: 'cors',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ plugins, commands })
+        }, timeoutMs);
+      } catch (error) { lastError = error; }
+    }
+    throw lastError || new Error('Local Dark Bot endpoint is not reachable.');
   }
   async function loadGuildDashboard(guild, bearerToken){
-    return staticGuildDashboard(guild);
+    let serverData = null;
+    let serverError = null;
+    try {
+      serverData = await fetchJson(`/api/dashboard/guild/${encodeURIComponent(guild.id)}`, { headers: { Authorization: 'Bearer ' + bearerToken } }, 7600);
+    } catch (err) {
+      serverError = err;
+    }
+    if (!serverData || serverData.botEndpointError) {
+      try {
+        return mergeLocalBotSetup(await fetchLocalBotDashboard(guild), guild, serverData);
+      } catch (localErr) {
+        if (serverData) return serverData;
+        throw serverError || localErr;
+      }
+    }
+    return serverData;
   }
   async function saveGuildPlugins(guildId, plugins, commands = {}){
-    const cfg = normalizeDashboardConfig({ plugins, commands });
-    saveGuildConfig(guildId, cfg);
-    return { plugins: cfg.plugins, commands: cfg.commands, static: true };
+    const t = token();
+    if (!t) throw new Error('Sign in again before saving plugin settings.');
+    try {
+      return await fetchJson(`/api/dashboard/guild/${encodeURIComponent(guildId)}/plugins`, {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + t, 'content-type': 'application/json' },
+        body: JSON.stringify({ plugins, commands })
+      }, 9000);
+    } catch (serverErr) {
+      return await patchLocalBotPlugins(guildId, plugins, commands);
+    }
   }
   function avatarHtml(u, cls = 'dash-avatar-v26'){
     return u?.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="" class="${cls}">` : `<span class="${cls} dash-avatar-fallback-v25">${esc((u?.display_name || u?.username || u?.name || 'U').slice(0,1).toUpperCase())}</span>`;
@@ -363,7 +399,7 @@
 
   const DASHBOARD_DISCORD_AUTH_KEY = 'dark_portal_dashboard_discord_auth_started_at';
   function discordAuthFallbackUrl(next){
-    return `/login.html?next=${encodeURIComponent(next || dashboardNextPath())}`;
+    return `/auth/discord?next=${encodeURIComponent(next || dashboardNextPath())}`;
   }
   function autoDiscordAuthRecentlyStarted(){
     try {
@@ -375,7 +411,16 @@
     try { sessionStorage.setItem(DASHBOARD_DISCORD_AUTH_KEY, String(Date.now())); } catch {}
   }
   async function discordAuthorizationUrl(){
-    return `/login.html?next=${encodeURIComponent(dashboardNextPath())}`;
+    const fallback = discordAuthFallbackUrl();
+    const t = token();
+    if (!t) return fallback;
+    try {
+      const data = await fetchJson(`/api/profile/link-intent/discord?next=${encodeURIComponent(dashboardNextPath())}`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + t }
+      }, 4200);
+      return data.url || fallback;
+    } catch { return fallback; }
   }
   function renderDiscordRedirect(reason){
     if (isServerConfigPage) {
@@ -392,16 +437,29 @@
     wireDiscordAuthButtons();
   }
   async function startDiscordAuthorization(reason){
-    renderDiscordRedirect(reason || 'This Netlify build runs without live Discord OAuth. Use the demo server or deploy the backend separately for live guild data.');
-    return false;
+    renderDiscordRedirect(reason);
+    if (autoDiscordAuthRecentlyStarted()) return false;
+    rememberAutoDiscordAuth();
+    const url = await discordAuthorizationUrl();
+    setTimeout(() => { window.location.assign(url); }, 250);
+    return true;
   }
   function wireDiscordAuthButtons(){
     document.querySelectorAll('[data-discord-auth]').forEach((btn) => {
       if (btn.dataset.discordAuthWired) return;
       btn.dataset.discordAuthWired = 'true';
-      btn.addEventListener('click', (event) => {
+      btn.addEventListener('click', async (event) => {
         event.preventDefault();
-        window.location.href = `/login.html?next=${encodeURIComponent(dashboardNextPath())}`;
+        const previous = btn.textContent;
+        btn.textContent = 'Opening Discord...';
+        btn.setAttribute('aria-busy', 'true');
+        try {
+          window.location.href = await discordAuthorizationUrl();
+        } catch {
+          btn.textContent = previous || 'Continue to Discord';
+          btn.removeAttribute('aria-busy');
+          window.location.href = discordAuthFallbackUrl();
+        }
       });
     });
   }
@@ -1153,14 +1211,43 @@
   }
 
   async function init(){
-    await Promise.resolve(window.DGAuth?.syncSessionFromToken?.()).catch(() => {});
     const saved = localProfile();
-    if (!saved) { window.location.href = `/login.html?next=${encodeURIComponent(dashboardNextPath())}`; return; }
-    currentUser = saved;
-    currentInvite = 'https://discord.com/oauth2/authorize?client_id=963487472300482560';
-    renderUser(currentUser);
-    try { currentStats = window.DGStaticStats?.build?.() || currentStats; renderUser(currentUser); } catch {}
-    renderServers(staticManagedServers(), 'Static Netlify build: demo server settings are saved locally in this browser.');
+    renderUser(saved);
+    renderLoading();
+    try { await Promise.race([window.DGAuth?.syncSessionFromToken?.(), new Promise(resolve => setTimeout(resolve, 1500))]); } catch {}
+    const t = token();
+    if (!t && !localProfile()) { window.location.href = `/login.html?next=${encodeURIComponent(dashboardNextPath())}`; return; }
+    if (!t) {
+      const started = await startDiscordAuthorization('Sign in again to load live Discord servers.');
+      if (!started) renderEmptyServers('');
+      return;
+    }
+    try {
+      const data = await fetchJson('/api/dashboard', { headers: { Authorization: 'Bearer ' + t } }, 9000);
+      currentUser = data.user || localProfile();
+      if (data.user) window.DGAuth?.setProfile?.(data.user);
+      if (data.botInvite) currentInvite = data.botInvite;
+      renderUser(currentUser);
+      if (data.needsDiscordLink || data.needsDiscordRefresh) {
+        const authStarted = await startDiscordAuthorization(data.managedServersNote || 'Discord authorization is required before the dashboard can load your manageable servers.');
+        if (authStarted) return;
+        renderEmptyServers('');
+      } else {
+        renderServers(data.managedServers || [], data.managedServersNote);
+      }
+      try {
+        const statsData = await fetchJson('/api/stats', { headers: { Authorization: 'Bearer ' + t } }, 4200);
+        if (statsData?.stats) { currentStats = statsData.stats; renderUser(currentUser); }
+      } catch {}
+    } catch (err) {
+      const shouldRefreshDiscord = err.status === 401 || err.status === 403 || /discord|unauthorized|refresh|token/i.test(err.message || '');
+      if (shouldRefreshDiscord) {
+        const authStarted = await startDiscordAuthorization('The dashboard could not load server data, so Discord access is being refreshed.');
+        if (authStarted) return;
+      }
+      renderEmptyServers('');
+      renderUser(localProfile() || null);
+    }
   }
 
   window.addEventListener('popstate', () => {

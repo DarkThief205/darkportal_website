@@ -28,25 +28,19 @@
   function localProfile(){
     return window.DGAuth?.currentProfile?.() || (() => { try { return JSON.parse(localStorage.getItem('dg_profile') || 'null'); } catch { return null; } })();
   }
-  function staticStats(){
-    try { return window.DGStaticStats?.build?.() || { progression: { level: 1, xp: 0, percent: 0 }, totals: { feedbackTickets: 0 } }; }
-    catch { return { progression: { level: 1, xp: 0, percent: 0 }, totals: { feedbackTickets: 0 } }; }
+  function withTimeout(ms = 5000){
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ms);
+    return { controller, done: () => clearTimeout(timer) };
   }
-  function persistProfile(profile){
-    if (!profile) return null;
-    profile.username = String(profile.username || 'static_user').trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '_') || 'static_user';
-    profile.display_name = String(profile.display_name || profile.username || 'Dark Portal User').trim() || 'Dark Portal User';
-    profile.created = Number(profile.created || Date.now());
-    profile.linked = profile.linked || {};
-    localStorage.setItem('dg_session', profile.username);
-    localStorage.setItem(TOKEN_KEY, localStorage.getItem(TOKEN_KEY) || `static-local-${profile.created}`);
-    localStorage.setItem('dg_profile', JSON.stringify(profile));
-    window.DGAuth?.setProfile?.(profile);
-    window.DGAuth?.updateTopbarAuth?.();
-    return profile;
-  }
-  function providerPayload(provider, display){
-    return { id: `static-${provider}`, username: display, name: display, global_name: display, persona: display, avatar: '' };
+  async function fetchJson(url, options = {}, timeoutMs = 5000){
+    const t = withTimeout(timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: t.controller.signal, cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+      return data;
+    } finally { t.done(); }
   }
   function providerIcon(key, data){
     const avatar = data?.avatar || data?.picture || data?.avatar_url || '';
@@ -162,12 +156,17 @@
     e.preventDefault();
     const msg = document.getElementById('profileSaveMsg');
     const name = document.getElementById('profileDisplayName')?.value?.trim();
-    if (msg) msg.textContent = 'Saving...';
+    msg.textContent = 'Saving...';
     try {
-      const profile = persistProfile({ ...(localProfile() || {}), display_name: name || 'Dark Portal User' });
-      if (msg) msg.textContent = 'Saved locally.';
-      render({ user: profile, stats: staticStats() });
-    } catch(err){ if (msg) msg.textContent = err.message || 'Could not save.'; }
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) throw new Error('Please sign in again.');
+      const data = await fetchJson('/api/profile', { method:'PATCH', headers:{ 'content-type':'application/json', Authorization:'Bearer ' + token }, body: JSON.stringify({ display_name: name }) }, 4000);
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+      if (data.user) window.DGAuth?.setProfile?.(data.user);
+      window.DGAuth?.updateTopbarAuth?.();
+      msg.textContent = 'Saved.';
+      render(data);
+    } catch(err){ msg.textContent = err.message || 'Could not save.'; }
   }
   async function linkProvider(e){
     const provider = e.currentTarget.dataset.linkProvider;
@@ -175,17 +174,17 @@
     const btn = e.currentTarget;
     const previous = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Linking...';
+    btn.textContent = 'Opening...';
     try {
-      const base = localProfile() || { username: `${provider}_user`, display_name: 'Dark Portal User', created: Date.now(), oauth_provider: provider };
-      const display = base.display_name || base.username || 'Dark Portal User';
-      base[provider] = base[provider] || providerPayload(provider, display);
-      base.linked = { ...(base.linked || {}), [provider]: true };
-      if (!base.oauth_provider) base.oauth_provider = provider;
-      const profile = persistProfile(base);
-      render({ user: profile, stats: staticStats() });
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) {
+        window.location.href = `/auth/${encodeURIComponent(provider)}?next=/profile.html`;
+        return;
+      }
+      const data = await fetchJson(`/api/profile/link-intent/${encodeURIComponent(provider)}`, { method:'POST', headers:{ Authorization:'Bearer ' + token } }, 4000);
+      window.location.href = data.url || `/auth/${encodeURIComponent(provider)}?next=/profile.html`;
     } catch(err) {
-      alert(err.message || `Could not link ${provider}.`);
+      alert(err.message || `Could not start ${provider} linking.`);
       btn.disabled = false;
       btn.textContent = previous;
     }
@@ -195,11 +194,12 @@
     if (!provider || e.currentTarget.disabled) return;
     if (!confirm(`Unlink ${provider} from this Dark Portal account?`)) return;
     try {
-      const profile = { ...(localProfile() || {}) };
-      delete profile[provider];
-      profile.linked = { ...(profile.linked || {}), [provider]: false };
-      persistProfile(profile);
-      render({ user: profile, stats: staticStats() });
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) throw new Error('Please sign in again.');
+      const data = await fetchJson(`/api/profile/unlink/${encodeURIComponent(provider)}`, { method:'POST', headers:{ Authorization:'Bearer ' + token } }, 4000);
+      if (data.token) localStorage.setItem(TOKEN_KEY, data.token);
+      if (data.user) window.DGAuth?.setProfile?.(data.user);
+      render(data);
     } catch(err){ alert(err.message || 'Could not unlink provider.'); }
   }
   function openDelete(){ document.getElementById('deleteProfileModal').hidden = false; document.body.classList.add('portal-modal-open'); window.DGTopbar?.hide?.(); }
@@ -207,18 +207,27 @@
   document.querySelectorAll('[data-close-delete]').forEach(b => b.addEventListener('click', closeDelete));
   document.getElementById('confirmDeleteProfile')?.addEventListener('click', async () => {
     try {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) throw new Error('Please sign in again.');
+      await fetchJson('/api/profile', { method:'DELETE', headers:{ Authorization:'Bearer ' + token } }, 4000);
       window.DGAuth?.logout?.();
-      localStorage.removeItem('dg_profile');
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem('dg_session');
       window.location.href = '/index.html';
     } catch(err){ alert(err.message || 'Could not delete account.'); }
   });
   async function init(){
-    await Promise.resolve(window.DGAuth?.syncSessionFromToken?.()).catch(() => {});
     const saved = localProfile();
-    if (!saved) { window.location.href = '/login.html?next=/profile.html'; return; }
-    render({ user: saved, stats: staticStats() });
+    if (saved) render({ user: saved });
+    try { await Promise.race([window.DGAuth?.syncSessionFromToken?.(), new Promise(resolve => setTimeout(resolve, 1200))]); } catch {}
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token && !localProfile()) { window.location.href = '/login.html?next=/profile.html'; return; }
+    if (!token) return;
+    try {
+      const data = await fetchJson('/api/profile', { headers:{ Authorization:'Bearer ' + token } }, 5000);
+      if (data.user) window.DGAuth?.setProfile?.(data.user);
+      render(data);
+    } catch(err) {
+      if (!saved) renderError(err.name === 'AbortError' ? 'The profile API took too long to answer.' : (err.message || 'The API did not answer in time.'));
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
 })();

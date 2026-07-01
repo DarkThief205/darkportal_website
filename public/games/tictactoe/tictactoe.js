@@ -662,23 +662,21 @@ function renderBoard() {
   saveActiveMatch();
 }
 
-function bumpLocalTttStats(result) {
-  const key = 'darkportal_ttt_stats_v1';
-  let stats = { wins: 0, losses: 0, draws: 0, xp: 0, bestScore: 0 };
-  try { stats = { ...stats, ...JSON.parse(localStorage.getItem(key) || '{}') }; } catch {}
-  if (result === 'win') stats.wins += 1;
-  else if (result === 'draw') stats.draws += 1;
-  else stats.losses += 1;
-  const score = result === 'win' ? 100 : result === 'draw' ? 40 : 10;
-  stats.xp += score;
-  stats.bestScore = Math.max(Number(stats.bestScore || 0), score);
-  stats.updatedAt = new Date().toISOString();
-  localStorage.setItem(key, JSON.stringify(stats));
-}
-
 async function saveProgress(result) {
-  if (playMode === 'online') return;
-  bumpLocalTttStats(result);
+  if (!tokenTtt || playMode === 'online') return;
+  try {
+    await fetch('/api/games/progress/tictactoe', {
+      method: 'POST',
+      headers: apiHeaders(),
+      body: JSON.stringify({
+        result,
+        score: result === 'win' ? 100 : result === 'draw' ? 40 : 10,
+        meta: { source: 'web', mode: playMode, variant: gameVariant, difficulty },
+      }),
+    });
+  } catch {
+    // Progress is optional for this gameplay milestone.
+  }
 }
 
 function recordMatchScore(result) {
@@ -903,11 +901,72 @@ function startLocalMatch() {
 }
 
 async function hostOnlineRoom() {
-  throw new Error('Online room hosting needs the backend API. This static Netlify build supports Bot and Local modes.');
+  hideResultModal();
+  lastResultModalKey = '';
+  roundNumber += 1;
+  sessionStorage.setItem('dark_ttt_round', String(roundNumber));
+
+  const response = await fetch('/api/games/tictactoe/rooms', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify(identityPayload({ game_variant: gameVariant || 'classic' })),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Could not host room');
+
+  onlineRoomId = data.match.id;
+  onlineAction = 'host';
+  applyOnlineMatch(data.match);
+
+  setRoomCodePill(true, onlineRoomId);
+  showGame();
+  startSessionTimer({ reset: true });
+  saveActiveMatch();
+  startPolling();
 }
 
 async function joinOnlineRoom(roomId, allowCreateFromLink = false) {
-  throw new Error('Online rooms need the backend API. This static Netlify build supports Bot and Local modes.');
+  hideResultModal();
+  lastResultModalKey = '';
+
+  const cleanRoomId = safeRoomCode(roomId);
+  if (!cleanRoomId) throw new Error('Enter a valid room code.');
+
+  if (!allowCreateFromLink) {
+    const checkQuery = new URLSearchParams(identityPayload()).toString();
+    const checkResponse = await fetch(`/api/games/tictactoe/rooms/${encodeURIComponent(cleanRoomId)}?${checkQuery}`, {
+      headers: tokenTtt ? { authorization: `Bearer ${tokenTtt}` } : {},
+    });
+
+    if (!checkResponse.ok) throw new Error('Room not found. Check the code and try again.');
+  }
+
+  const opponentDiscordId = query.get('opponentDiscordId') || '';
+  const opponentName = query.get('opponentName') || '';
+
+  const response = await fetch(`/api/games/tictactoe/rooms/${encodeURIComponent(cleanRoomId)}/open`, {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify(identityPayload({
+      opponent_discord_id: opponentDiscordId,
+      opponent_name: opponentName,
+      game_variant: gameVariant || query.get('variant') || 'classic',
+    })),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Could not join room');
+
+  onlineRoomId = cleanRoomId;
+  onlineAction = allowCreateFromLink ? 'link' : 'join';
+  applyOnlineMatch(data.match);
+
+  setRoomCodePill(false);
+  showGame();
+  startSessionTimer({ reset: true });
+  saveActiveMatch();
+  startPolling();
 }
 
 async function startMatch() {
@@ -977,7 +1036,18 @@ function applyOnlineMatch(match) {
   }
 }
 
-async function pollOnlineRoom() { return; }
+async function pollOnlineRoom() {
+  if (!onlineRoomId || playMode !== 'online') return;
+
+  const queryString = new URLSearchParams(identityPayload()).toString();
+  const response = await fetch(`/api/games/tictactoe/rooms/${encodeURIComponent(onlineRoomId)}?${queryString}`, {
+    headers: tokenTtt ? { authorization: `Bearer ${tokenTtt}` } : {},
+  });
+
+  if (!response.ok) return;
+  const data = await response.json();
+  applyOnlineMatch(data.match);
+}
 
 function startPolling() {
   stopPolling();
@@ -989,7 +1059,24 @@ function stopPolling() {
   onlinePoll = null;
 }
 
-async function playOnlineMove(index) { setMessage('Online mode needs the backend API in the full version.', 'bad'); }
+async function playOnlineMove(index) {
+  if (!onlineRoomId || onlineRole === 'observer' || currentMatch?.status !== 'active') return;
+
+  const response = await fetch(`/api/games/tictactoe/rooms/${encodeURIComponent(onlineRoomId)}/move`, {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify(identityPayload({ cell: index })),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    setMessage(data.error || 'Move failed.', 'bad');
+    if (data.match) applyOnlineMatch(data.match);
+    return;
+  }
+
+  applyOnlineMatch(data.match);
+}
 
 function bindEvents() {
   modeBotBtn.addEventListener('click', () => chooseOpponent('bot'));

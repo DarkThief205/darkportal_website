@@ -57,23 +57,32 @@ function logout() {
 }
 
 async function syncSessionFromToken() {
-  // Netlify static build: no backend /api/me endpoint is required.
-  const profile = currentProfile();
-  if (profile?.username) {
-    setSession(profile.username);
-    return true;
-  }
-  const username = currentUser();
-  if (username) {
-    setProfile({
-      username,
-      display_name: username,
-      created: Date.now(),
-      oauth_provider: "Static"
+  const token = localStorage.getItem(DG_TOKEN_KEY);
+  if (!token) return !!currentUser();
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2200);
+  try {
+    const res = await fetch("/api/me", {
+      headers: { Authorization: "Bearer " + token },
+      cache: "no-store",
+      signal: controller.signal
     });
-    return true;
+    if (!res.ok) throw new Error("Unauthorized");
+    const user = await res.json();
+    if (user?.username) {
+      setProfile(user);
+      return true;
+    }
+  } catch (e) {
+    // Timeout means the API is slow, not necessarily that the user is invalid.
+    // Keep the saved session so account pages can render a local fallback instead of freezing.
+    if (e?.name !== "AbortError") localStorage.removeItem(DG_TOKEN_KEY);
+  } finally {
+    clearTimeout(timer);
   }
-  return false;
+
+  return !!currentUser();
 }
 
 // --------------------- Topbar UI ---------------------

@@ -1,13 +1,33 @@
 [build]
+  command = "echo \"No frontend build required; backend runs as Netlify Functions\""
   publish = "public"
-  command = "echo 'Static site: no build step required'"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["sqlite3"]
+  included_files = ["server.js", "db.js", "routes/**", "public/**"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/.netlify/functions/api/auth/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/bot-invite"
-  to = "https://discord.com/oauth2/authorize?client_id=963487472300482560"
-  status = 302
+  to = "/.netlify/functions/api/bot-invite"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/support-invite"
-  to = "https://discord.gg/bJ8dqwSCuU"
-  status = 302
+  to = "/.netlify/functions/api/support-invite"
+  status = 200
+  force = true

@@ -523,7 +523,19 @@
     setStats(stats);
     updateHud();
 
-    // Netlify static build: Wordle stats are saved locally above in darkportal_wordle_stats_v2.
+    const token = localStorage.getItem(window.DGAuth?.TOKEN_KEY || 'dg_token');
+    if (!token) return;
+    try {
+      await fetch('/api/games/progress/wordle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          result,
+          score,
+          meta: { mode: state.mode, length: state.length, difficulty: state.difficulty, attempts, answer: state.answer, date: todayKey() }
+        })
+      });
+    } catch (_) {}
   }
 
   function finish(win) {

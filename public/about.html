@@ -1,7 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Netlify static build: canonical redirect disabled. -->
+  <script>
+    (function() {
+      var canonical = "https://darkportal.is-a.dev";
+      var local = /^(localhost|127\.0\.0\.1|::1)$/i.test(location.hostname);
+      if (!local && location.protocol !== 'file:' && canonical && location.origin !== canonical) {
+        location.replace(canonical + location.pathname + location.search + location.hash);
+      }
+    })();
+  </script>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -182,9 +190,13 @@
       const labelFor = { online: 'Online', partial: 'Partial', critical: 'Critical', offline: 'Offline', checking: 'Checking' };
       function normalize(value) { const state = String(value || 'checking').trim().toLowerCase(); return allowed.has(state) ? state : 'checking'; }
       function setStatus(key, state) { const normalized = normalize(state); if (rows[key]) rows[key].dataset.status = normalized; if (labels[key]) labels[key].textContent = labelFor[normalized]; }
-      // Static Netlify build: there is no backend status API.
-      setStatus('website', 'online');
-      setStatus('bot', 'partial');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1600);
+      fetch('/api/portal-status', { cache: 'no-store', signal: controller.signal })
+        .then((res) => res.ok ? res.json() : Promise.reject(new Error('status failed')))
+        .then((data) => { setStatus('website', data.website?.state || (data.serverOnline ? 'online' : 'offline')); setStatus('bot', data.bot?.state || (data.botOnline ? 'online' : 'offline')); })
+        .catch(() => { setStatus('website', 'offline'); setStatus('bot', 'offline'); })
+        .finally(() => clearTimeout(timer));
 
       const policyContent = {
         terms: { label: 'Terms of Service', title: 'Terms of Service', body: document.getElementById('termsPolicySource')?.innerHTML || '' },

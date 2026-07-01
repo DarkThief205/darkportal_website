@@ -8,7 +8,7 @@
 
   function localProfile(){ try { return window.DGAuth?.currentProfile?.() || JSON.parse(localStorage.getItem('dg_profile') || 'null'); } catch { return null; } }
   const STATS_DISCORD_AUTH_KEY = 'dark_portal_stats_discord_auth_started_at';
-  function authUrl(){ return `/login.html?next=${encodeURIComponent('/stats.html')}`; }
+  function authUrl(){ return `/auth/discord?next=${encodeURIComponent('/stats.html')}`; }
   function authRecentlyStarted(){ try { const last = Number(sessionStorage.getItem(STATS_DISCORD_AUTH_KEY) || 0); return last && Date.now() - last < 120000; } catch { return false; } }
   function startDiscordAuth(){
     if (authRecentlyStarted()) return false;
@@ -17,33 +17,6 @@
     return true;
   }
   function num(v){ return Number(v || 0); }
-  function buildStaticStats(){
-    const user = localProfile() || { username: localStorage.getItem('dg_session') || 'player', created: Date.now() };
-    let wordle = {};
-    try { wordle = JSON.parse(localStorage.getItem('darkportal_wordle_stats_v2') || '{}'); } catch {}
-    let ttt = {};
-    try { ttt = JSON.parse(localStorage.getItem('darkportal_ttt_stats_v1') || '{}'); } catch {}
-    const sudokuGames = [];
-    try {
-      const username = user.username || localStorage.getItem('dg_session') || 'player';
-      ['classic','killer'].forEach((variant) => ['easy','medium','hard','extreme'].forEach((diff) => {
-        const key = `dg_progress_${username}_${variant}_${diff}`;
-        const progress = Number(localStorage.getItem(key) || 0);
-        if (progress > 0) sudokuGames.push({ game_key: variant === 'killer' ? `sumdoku_${diff}` : `sudoku_${diff}`, wins: Math.floor(progress / 100), losses: 0, draws: 0, xp: Math.round(progress * (variant === 'killer' ? 1.4 : 1)) });
-      }));
-    } catch {}
-    const games = [
-      { game_key:'tictactoe', wins:num(ttt.wins), losses:num(ttt.losses), draws:num(ttt.draws), xp:num(ttt.xp), best_score:num(ttt.bestScore) },
-      ...sudokuGames,
-      { game_key:'wordle', wins:num(wordle.wins), losses:num(wordle.losses), draws:0, xp:num(wordle.wins)*80 + num(wordle.played)*10, best_score:num(wordle.bestScore) }
-    ];
-    const totals = games.reduce((acc,g)=>{ acc.gamesPlayed += num(g.wins)+num(g.losses)+num(g.draws); acc.wins += num(g.wins); acc.losses += num(g.losses); acc.draws += num(g.draws); acc.portalXp += num(g.xp); return acc; }, { gamesPlayed:0, wins:0, losses:0, draws:0, feedbackTickets:0, portalXp:0 });
-    const xp = totals.portalXp;
-    const level = Math.max(1, Math.floor(xp / 120) + 1);
-    const intoLevel = xp % 120;
-    return { progression: { level, xp, percent: Math.round((intoLevel / 120) * 100), intoLevel, needed: 120 }, games, tictactoe: games[0], sudoku: sudokuGames, totals, bot: { commandExecutions: 0, trackedCommands: 0 } };
-  }
-  window.DGStaticStats = window.DGStaticStats || { build: buildStaticStats };
   function gamePlayed(g){ return num(g?.wins) + num(g?.losses) + num(g?.draws); }
   function normKey(k){ return String(k || '').toLowerCase(); }
   function row(label, value, hint=''){ return `<div class="stat-row-v22 stat-row-v29 stat-row-v30"><span>${esc(label)}</span><b>${esc(value)}</b>${hint ? `<small>${esc(hint)}</small>` : ''}</div>`; }
@@ -96,10 +69,25 @@
     cols.innerHTML = '';
   }
   async function init(){
-    await Promise.resolve(window.DGAuth?.syncSessionFromToken?.()).catch(() => {});
+    try { await Promise.race([window.DGAuth?.syncSessionFromToken?.(), new Promise(resolve => setTimeout(resolve, 1200))]); } catch {}
+    const token = localStorage.getItem('dg_token');
     const saved = localProfile();
-    if (!saved) { window.location.href = '/login.html?next=/stats.html'; return; }
-    render({ user: saved, stats: buildStaticStats() });
+    if (saved) render({ user: saved, stats: { progression: { level: 1, xp: 0, percent: 0, intoLevel:0, needed:120 }, totals: {} } });
+    if (!token && !saved) { window.location.href = '/login.html?next=/stats.html'; return; }
+    if (!token) { startDiscordAuth(); return; }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch('/api/stats', { headers:{ authorization:'Bearer ' + token }, cache:'no-store', signal: controller.signal });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Unauthorized');
+      if (data.user) window.DGAuth?.setProfile?.(data.user);
+      render(data);
+    } catch(err) {
+      const shouldRefreshDiscord = /discord|unauthorized|refresh|token/i.test(err.message || '') || err.message === 'Unauthorized';
+      if (shouldRefreshDiscord && startDiscordAuth()) return;
+      if (!saved) renderError(err.name === 'AbortError' ? 'Stats API timed out.' : err.message);
+    } finally { clearTimeout(timer); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true }); else init();
 })();

@@ -1,7 +1,5 @@
 // auth.js — OAuth / provider login page with policy confirmation.
 const AUTH_SESSION_KEY = "dg_session";
-const AUTH_TOKEN_KEY = "dg_token";
-const AUTH_PROFILE_KEY = "dg_profile";
 
 function safeNext(value) {
   if (!value || typeof value !== "string") return "/dashboard.html";
@@ -15,34 +13,10 @@ const nextPath = safeNext(urlParams.get("next") || "/dashboard.html");
 
 function currentUser() { return localStorage.getItem(AUTH_SESSION_KEY) || null; }
 function go(provider) {
-  // Netlify static build: create a local browser-only session instead of using OAuth routes.
-  const names = { discord: "Discord", google: "Google", steam: "Steam" };
-  const providerName = names[provider] || "Local";
-  let existing = null;
-  try { existing = JSON.parse(localStorage.getItem(AUTH_PROFILE_KEY) || "null"); } catch {}
-  const created = existing?.created || Date.now();
-  const username = existing?.username || `${provider}_user`;
-  const display = existing?.display_name || `${providerName} User`;
-  const profile = {
-    ...(existing || {}),
-    username,
-    display_name: display,
-    created,
-    oauth_provider: existing?.oauth_provider || providerName,
-    linked: { ...(existing?.linked || {}), [provider]: true }
-  };
-  profile[provider] = profile[provider] || {
-    id: `static-${provider}`,
-    username: display,
-    name: display,
-    global_name: display,
-    persona: display,
-    avatar: ""
-  };
-  localStorage.setItem(AUTH_SESSION_KEY, username);
-  localStorage.setItem(AUTH_TOKEN_KEY, `static-${provider}-${created}`);
-  localStorage.setItem(AUTH_PROFILE_KEY, JSON.stringify(profile));
-  window.location.assign(nextPath);
+  // Always go through the backend OAuth route. The backend decides whether to use
+  // real OAuth or a local/dev fallback based on .env. This keeps localhost working
+  // with real Discord/Google/Steam credentials when FORCE_REAL_OAUTH=true.
+  window.location.assign(`/auth/${provider}?next=${encodeURIComponent(nextPath)}`);
 }
 
 const POLICY = {

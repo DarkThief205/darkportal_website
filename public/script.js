@@ -90,8 +90,20 @@ function updateTopbarAuth() {
 }
 updateTopbarAuth();
 
-// Netlify static build: saved profile/session is read directly from localStorage.
-
+const serverToken = localStorage.getItem(TOKEN_KEY);
+if (serverToken) {
+  (async () => {
+    try {
+      const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + serverToken }, cache: "no-store" });
+      if (res.ok) {
+        const j = await res.json();
+        if (j?.username) localStorage.setItem(SESSION_KEY, String(j.username).trim().toLowerCase());
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(j));
+        updateTopbarAuth();
+      }
+    } catch(e) {}
+  })();
+}
 
 // --------------------- Falling background ---------------------
 const sudokuFallingLayer = document.getElementById("sudokuFallingLayer") || document.querySelector(".sudoku-falling-layer");
@@ -446,8 +458,18 @@ function writeUserProgress(user, variant, diff, newProgress) {
   return val;
 }
 async function recordSudokuProgress(result = 'win') {
-  // Netlify static build: Sudoku progression is already saved locally by awardProgressOnWin().
-  return Promise.resolve(result);
+  try {
+    const token = localStorage.getItem('dg_token');
+    if (!token) return;
+    const scoreByDiff = { easy: 60, medium: 100, hard: 155, extreme: 230 };
+    const score = scoreByDiff[difficulty] || 100;
+    const key = gameVariant === 'killer' ? 'sumdoku' : 'sudoku';
+    await fetch('/api/games/progress/' + key, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify({ result, score, meta: { variant: gameVariant, difficulty, seconds, mistakes, hintsUsed } })
+    });
+  } catch (e) {}
 }
 
 function awardProgressOnWin() {
