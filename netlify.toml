@@ -1,9 +1,14 @@
 [build]
   publish = "public"
   functions = "netlify/functions"
+  command = "node -e \"console.log('DarkPortal static deploy: no build step')\""
 
 [build.environment]
   NODE_VERSION = "20"
+  NPM_CONFIG_REGISTRY = "https://registry.npmjs.org/"
+  NPM_CONFIG_PACKAGE_LOCK = "false"
+  NPM_CONFIG_AUDIT = "false"
+  NPM_CONFIG_FUND = "false"
 
 [functions]
   node_bundler = "esbuild"
