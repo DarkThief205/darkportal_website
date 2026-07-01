@@ -68,8 +68,12 @@ function setupPolicyModal(){
   document.addEventListener('keydown',(e)=>{ if(e.key === 'Escape') close(); });
 }
 
-(function () {
+(async function () {
   if (currentUser()) { window.location.href = nextPath; return; }
+  try {
+    const hydrated = await window.DGAuth?.hydrateSessionFromServer?.(3200);
+    if (hydrated || currentUser()) { window.location.href = nextPath; return; }
+  } catch (_) {}
   setupPolicyModal();
   const accept = document.getElementById('acceptPolicies');
   const hint = document.getElementById('authPolicyHint');

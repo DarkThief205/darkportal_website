@@ -28,10 +28,11 @@ function isLocalHostName(hostname) {
   const host = String(hostname || '').split(':')[0].toLowerCase();
   return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
-function requestOrigin(req) {
-  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+function requestOrigin(req = {}) {
+  const headers = req.headers || {};
+  const forwardedProto = String(headers['x-forwarded-proto'] || '').split(',')[0].trim();
   const proto = forwardedProto || req.protocol || 'http';
-  const host = req.get('host') || '';
+  const host = (typeof req.get === 'function' ? req.get('host') : headers.host) || '';
   return `${proto}://${host}`.replace(/\/$/, '');
 }
 
@@ -131,7 +132,7 @@ async function finishLocalProviderLogin(provider, next, res, req = null, linkTok
       avatar: null,
       profile_url: null
     }, linkToken);
-    return finishBrowserLogin(res, row, next);
+    return finishBrowserLogin(req, res, row, next);
   } catch (err) {
     return sendOAuthError(res, err.message || `Could not link ${provider}.`, safeRedirect(next || '/profile.html'));
   }
@@ -280,6 +281,43 @@ function safeRedirect(target) {
   return target;
 }
 
+function parseCookieHeader(header) {
+  const out = {};
+  String(header || '').split(';').forEach((part) => {
+    const index = part.indexOf('=');
+    if (index < 0) return;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) return;
+    try { out[key] = decodeURIComponent(value); } catch { out[key] = value; }
+  });
+  return out;
+}
+
+function authTokenFromRequest(req) {
+  const auth = req.headers.authorization || req.headers.Authorization || '';
+  if (String(auth).startsWith('Bearer ')) return String(auth).slice(7).trim();
+  const cookies = parseCookieHeader(req.headers.cookie || req.headers.Cookie || '');
+  return cookies.dp_session || cookies.dg_token || '';
+}
+
+function sessionCookie(token, req) {
+  const secure = requestOrigin(req || {}).startsWith('https://') || String(req?.headers?.['x-forwarded-proto'] || '').includes('https');
+  return [
+    `dp_session=${encodeURIComponent(token)}`,
+    'Path=/',
+    'Max-Age=2592000',
+    'SameSite=Lax',
+    secure ? 'Secure' : '',
+    'HttpOnly'
+  ].filter(Boolean).join('; ');
+}
+
+function clearSessionCookie(req) {
+  const secure = requestOrigin(req || {}).startsWith('https://') || String(req?.headers?.['x-forwarded-proto'] || '').includes('https');
+  return ['dp_session=', 'Path=/', 'Max-Age=0', 'SameSite=Lax', secure ? 'Secure' : '', 'HttpOnly'].filter(Boolean).join('; ');
+}
+
 function encodeState(next, linkToken = '') {
   const payload = { next: safeRedirect(next) };
   if (linkToken) payload.link = String(linkToken);
@@ -340,11 +378,12 @@ function verifyProviderLinkToken(provider, token) {
 }
 
 async function getBearerUser(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+  const token = authTokenFromRequest(req);
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     await dbReady;
-    req.user = jwt.verify(auth.slice(7), JWT_SECRET);
+    req.user = jwt.verify(token, JWT_SECRET);
+    req.authToken = token;
     next();
   } catch (err) {
     const message = err && err.name === 'JsonWebTokenError' ? 'Invalid token' : 'Unauthorized';
@@ -396,6 +435,8 @@ function publicUser(row) {
 }
 
 function signUser(row) {
+  // The Netlify version cannot rely on a persistent sqlite process. Keep the
+  // session self-contained so a cold function start does not force OAuth again.
   return jwt.sign({
     id: row.id,
     username: row.username,
@@ -403,10 +444,57 @@ function signUser(row) {
     email: row.email,
     verified: !!row.verified,
     avatar_url: userAvatar(row),
+    oauth_provider: row.oauth_provider || null,
     discord_id: row.discord_id || null,
+    discord_username: row.discord_username || null,
+    discord_global_name: row.discord_global_name || null,
+    discord_avatar: row.discord_avatar || null,
+    discord_access_token: row.discord_access_token || null,
+    discord_refresh_token: row.discord_refresh_token || null,
+    discord_token_expires: row.discord_token_expires || null,
     google_id: row.google_id || null,
-    steam_id: row.steam_id || null
+    google_name: row.google_name || null,
+    google_avatar: row.google_avatar || null,
+    steam_id: row.steam_id || null,
+    steam_persona: row.steam_persona || null,
+    steam_avatar: row.steam_avatar || null,
+    steam_profile_url: row.steam_profile_url || null
   }, JWT_SECRET, { expiresIn: '30d' });
+}
+
+function userFromTokenPayload(payload = {}) {
+  if (!payload || !payload.id || !payload.username) return null;
+  return {
+    id: payload.id,
+    username: payload.username,
+    email: payload.email || null,
+    verified: payload.verified ? 1 : 0,
+    display_name: payload.display_name || payload.username,
+    avatar_url: payload.avatar_url || null,
+    oauth_provider: payload.oauth_provider || null,
+    discord_id: payload.discord_id || null,
+    discord_username: payload.discord_username || null,
+    discord_global_name: payload.discord_global_name || null,
+    discord_avatar: payload.discord_avatar || null,
+    discord_access_token: payload.discord_access_token || null,
+    discord_refresh_token: payload.discord_refresh_token || null,
+    discord_token_expires: payload.discord_token_expires || null,
+    google_id: payload.google_id || null,
+    google_name: payload.google_name || null,
+    google_avatar: payload.google_avatar || null,
+    steam_id: payload.steam_id || null,
+    steam_persona: payload.steam_persona || null,
+    steam_avatar: payload.steam_avatar || null,
+    steam_profile_url: payload.steam_profile_url || null,
+    created: payload.iat ? payload.iat * 1000 : Date.now()
+  };
+}
+
+async function readRequestUser(req) {
+  await dbReady;
+  if (!req?.user?.id) return null;
+  const row = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]).catch(() => null);
+  return row || userFromTokenPayload(req.user);
 }
 
 function safeUsername(value, fallback = 'player') {
@@ -621,17 +709,22 @@ async function resolveProviderLogin(provider, profile, linkToken = '') {
   return findOrCreateOAuthUser(provider, profile);
 }
 
-function finishBrowserLogin(res, row, next = '/dashboard.html') {
+function finishBrowserLogin(req, res, row, next = '/dashboard.html') {
   const token = signUser(row);
   const profile = publicUser(row);
   const target = safeRedirect(next);
-  res.send(`<!doctype html>
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Set-Cookie', sessionCookie(token, req));
+  res.type('html').send(`<!doctype html>
 <meta charset="utf-8">
+<meta name="robots" content="noindex">
 <title>Login successful</title>
 <script>
-localStorage.setItem('dg_token', ${JSON.stringify(token)});
-localStorage.setItem('dg_session', ${JSON.stringify(row.username)});
-localStorage.setItem('dg_profile', ${JSON.stringify(JSON.stringify(profile))});
+try {
+  localStorage.setItem('dg_token', ${JSON.stringify(token)});
+  localStorage.setItem('dg_session', ${JSON.stringify(row.username)});
+  localStorage.setItem('dg_profile', ${JSON.stringify(JSON.stringify(profile))});
+} catch (e) {}
 location.replace(${JSON.stringify(target)});
 </script>
 <p>Login successful. Redirecting...</p>`);
@@ -742,7 +835,7 @@ app.get('/auth/discord/callback', async (req, res) => {
       refresh_token: tokenJson.refresh_token || null,
       token_expires: tokenJson.expires_in ? Date.now() + Number(tokenJson.expires_in) * 1000 : null
     }, linkToken);
-    finishBrowserLogin(res, row, next);
+    finishBrowserLogin(req, res, row, next);
   } catch (e) {
     console.error('Discord OAuth error:', e);
     if (allowLocalProviderFallback(req) && !linkToken) return finishLocalProviderLogin('discord', next, res, req, linkToken);
@@ -800,7 +893,7 @@ app.get('/auth/google/callback', async (req, res) => {
       name: me.name || null,
       avatar: me.picture || null
     }, linkToken);
-    finishBrowserLogin(res, row, next);
+    finishBrowserLogin(req, res, row, next);
   } catch (e) {
     console.error('Google OAuth error:', e);
     if (allowLocalProviderFallback(req) && !linkToken) return finishLocalProviderLogin('google', next, res, req, linkToken);
@@ -846,7 +939,7 @@ app.get('/auth/steam/callback', async (req, res) => {
       avatar: steamProfile?.avatarfull || steamProfile?.avatarmedium || steamProfile?.avatar || null,
       profile_url: steamProfile?.profileurl || `https://steamcommunity.com/profiles/${steamId}`
     }, linkToken);
-    finishBrowserLogin(res, row, next);
+    finishBrowserLogin(req, res, row, next);
   } catch (e) {
     console.error('Steam login error:', e);
     if (allowLocalProviderFallback(req) && !linkToken) return finishLocalProviderLogin('steam', next, res, req, linkToken);
@@ -1084,7 +1177,7 @@ async function buildStatsForUser(userId) {
 
 app.get('/api/dashboard', getBearerUser, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const progress = await dbAll(
       `SELECT game_key, wins, losses, draws, best_score, xp, last_played, meta_json FROM game_progress WHERE user_id = ? ORDER BY last_played DESC`,
@@ -1112,7 +1205,7 @@ app.get('/api/dashboard/guild/:guildId', getBearerUser, async (req, res) => {
   try {
     const guildId = String(req.params.guildId || '').trim();
     if (!/^\d{5,30}$/.test(guildId)) return res.status(400).json({ error: 'Invalid guild id' });
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const discordGuilds = await readDiscordManagedGuilds(user);
     const allowed = (discordGuilds.guilds || []).find((g) => String(g.id) === guildId);
@@ -1200,7 +1293,7 @@ app.patch('/api/dashboard/guild/:guildId/plugins', getBearerUser, async (req, re
   try {
     const guildId = String(req.params.guildId || '').trim();
     if (!/^\d{5,30}$/.test(guildId)) return res.status(400).json({ error: 'Invalid guild id' });
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const discordGuilds = await readDiscordManagedGuilds(user);
     const allowed = (discordGuilds.guilds || []).find((g) => String(g.id) === guildId);
@@ -1218,7 +1311,7 @@ app.patch('/api/dashboard/guild/:guildId/plugins', getBearerUser, async (req, re
 
 app.get('/api/profile', getBearerUser, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const stats = await buildStatsForUser(user.id);
     res.json({ user: publicUser(user), stats, supportInvite: SUPPORT_INVITE_URL });
@@ -1232,7 +1325,7 @@ app.post('/api/profile/link-intent/:provider', getBearerUser, async (req, res) =
   const provider = String(req.params.provider || '').toLowerCase();
   if (!['discord', 'google', 'steam'].includes(provider)) return res.status(400).json({ error: 'Unsupported provider.' });
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const link = createProviderLinkToken(provider, user.id);
     const params = new URLSearchParams({ next: safeRedirect(req.query.next || '/profile.html'), link });
@@ -1248,7 +1341,7 @@ app.patch('/api/profile', getBearerUser, async (req, res) => {
   if (displayName.length < 2) return res.status(400).json({ error: 'Display name must be at least 2 characters.' });
   try {
     await dbRun(`UPDATE users SET display_name = ? WHERE id = ?`, [displayName, req.user.id]);
-    const row = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const row = await readRequestUser(req);
     if (!row) return res.status(401).json({ error: 'Unauthorized' });
     res.json({ user: publicUser(row), token: signUser(row), message: 'Profile updated.' });
   } catch (err) {
@@ -1264,7 +1357,7 @@ app.post('/api/profile/unlink/:provider', getBearerUser, async (req, res) => {
   const allowed = ['discord', 'google', 'steam'];
   if (!allowed.includes(provider)) return res.status(400).json({ error: 'Unsupported provider.' });
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const linked = [user.discord_id ? 'discord' : null, user.google_id ? 'google' : null, user.steam_id ? 'steam' : null].filter(Boolean);
     if (linked.length <= 1 && linked.includes(provider)) {
@@ -1277,7 +1370,8 @@ app.post('/api/profile/unlink/:provider', getBearerUser, async (req, res) => {
     } else if (provider === 'steam') {
       await dbRun(`UPDATE users SET steam_id = NULL, steam_persona = NULL, steam_avatar = NULL, steam_profile_url = NULL WHERE id = ?`, [req.user.id]);
     }
-    const row = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const row = await readRequestUser(req);
+    if (!row) return res.status(401).json({ error: 'Unauthorized' });
     res.json({ user: publicUser(row), token: signUser(row), stats: await buildStatsForUser(row.id) });
   } catch (err) {
     console.error('profile unlink error', err);
@@ -1297,7 +1391,7 @@ app.delete('/api/profile', getBearerUser, async (req, res) => {
 
 app.get('/api/stats', getBearerUser, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await readRequestUser(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const stats = await buildStatsForUser(user.id);
     res.json({ user: publicUser(user), stats });
@@ -1378,9 +1472,34 @@ app.post('/api/feedback', getBearerUser, async (req, res) => {
   }
 });
 
+app.get('/api/session', async (req, res) => {
+  const token = authTokenFromRequest(req);
+  if (!token) return res.json({ authenticated: false });
+  try {
+    await dbReady;
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    req.authToken = token;
+    const row = await readRequestUser(req);
+    if (!row) return res.json({ authenticated: false });
+    const freshToken = signUser(row);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Set-Cookie', sessionCookie(freshToken, req));
+    return res.json({ authenticated: true, token: freshToken, user: publicUser(row) });
+  } catch (err) {
+    res.setHeader('Set-Cookie', clearSessionCookie(req));
+    return res.json({ authenticated: false });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  res.setHeader('Set-Cookie', clearSessionCookie(req));
+  res.json({ ok: true });
+});
+
 app.get('/api/me', getBearerUser, async (req, res) => {
   try {
-    const row = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const row = await readRequestUser(req);
     if (!row) return res.status(401).json({ error: 'Unauthorized' });
     res.json(publicUser(row));
   } catch (err) {

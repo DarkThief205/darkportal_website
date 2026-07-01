@@ -99,9 +99,18 @@ exports.handler = async function handler(event) {
   });
 
   const responseHeaders = {};
+  const multiValueHeaders = {};
+  const setCookies = typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : [];
   response.headers.forEach((value, key) => {
-    if (!['content-length', 'transfer-encoding'].includes(key.toLowerCase())) responseHeaders[key] = value;
+    const lower = key.toLowerCase();
+    if (['content-length', 'transfer-encoding'].includes(lower)) return;
+    if (lower === 'set-cookie') {
+      if (!setCookies.includes(value)) setCookies.push(value);
+      return;
+    }
+    responseHeaders[key] = value;
   });
+  if (setCookies.length) multiValueHeaders['Set-Cookie'] = setCookies;
 
   const buffer = Buffer.from(await response.arrayBuffer());
   const textResponse = isTextResponse(response.headers);
@@ -109,6 +118,7 @@ exports.handler = async function handler(event) {
   return {
     statusCode: response.status,
     headers: responseHeaders,
+    multiValueHeaders,
     body: textResponse ? buffer.toString('utf8') : buffer.toString('base64'),
     isBase64Encoded: !textResponse,
   };

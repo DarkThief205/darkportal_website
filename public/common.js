@@ -49,6 +49,7 @@ function loginUrl() {
 }
 
 function logout() {
+  try { fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(() => {}); } catch (_) {}
   localStorage.removeItem(DG_SESSION_KEY);
   localStorage.removeItem(DG_TOKEN_KEY);
   localStorage.removeItem(DG_PROFILE_KEY);
@@ -56,16 +57,43 @@ function logout() {
   try { updateProgressionUI(); } catch(e) {}
 }
 
+async function hydrateSessionFromServer(timeoutMs = 3200) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch("/api/session", {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error("No session");
+    const data = await res.json();
+    if (data?.authenticated && data?.user?.username) {
+      if (data.token) localStorage.setItem(DG_TOKEN_KEY, data.token);
+      setProfile(data.user);
+      return true;
+    }
+  } catch (_) {
+  } finally {
+    clearTimeout(timer);
+  }
+  return false;
+}
+
 async function syncSessionFromToken() {
   const token = localStorage.getItem(DG_TOKEN_KEY);
-  if (!token) return !!currentUser();
+  if (!token) {
+    const hydrated = await hydrateSessionFromServer();
+    return hydrated || !!currentUser();
+  }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2200);
+  const timer = setTimeout(() => controller.abort(), 3200);
   try {
     const res = await fetch("/api/me", {
       headers: { Authorization: "Bearer " + token },
       cache: "no-store",
+      credentials: "same-origin",
       signal: controller.signal
     });
     if (!res.ok) throw new Error("Unauthorized");
@@ -76,8 +104,13 @@ async function syncSessionFromToken() {
     }
   } catch (e) {
     // Timeout means the API is slow, not necessarily that the user is invalid.
-    // Keep the saved session so account pages can render a local fallback instead of freezing.
-    if (e?.name !== "AbortError") localStorage.removeItem(DG_TOKEN_KEY);
+    // On a real 401, try the server cookie session before clearing the browser token;
+    // Netlify cold starts can lose the temporary JSON store while the signed session is still valid.
+    if (e?.name !== "AbortError") {
+      const hydrated = await hydrateSessionFromServer(3200);
+      if (hydrated) return true;
+      localStorage.removeItem(DG_TOKEN_KEY);
+    }
   } finally {
     clearTimeout(timer);
   }
@@ -188,6 +221,7 @@ window.DGAuth = {
   escapeHtml,
   logout,
   syncSessionFromToken,
+  hydrateSessionFromServer,
   updateTopbarAuth,
   loginUrl
 };

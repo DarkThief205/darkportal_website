@@ -1,6 +1,6 @@
 {
-  "name": "darkportal-netlify-ready-v68",
-  "version": "0.1.1",
+  "name": "darkportal-netlify-ready-v69",
+  "version": "0.1.2",
   "description": "Dark Portal website packaged for Netlify static hosting plus serverless functions",
   "main": "server.js",
   "scripts": {
