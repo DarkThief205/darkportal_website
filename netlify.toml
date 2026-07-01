@@ -1,5 +1,5 @@
 [build]
-  command = "echo \"No frontend build required; backend runs as Netlify Functions\""
+  command = "npm install && npm run build"
   publish = "public"
   functions = "netlify/functions"
 

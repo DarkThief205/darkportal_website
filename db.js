@@ -1,19 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const fs = require('fs');
-
-function resolveDbPath() {
-  const configured = String(process.env.DB_PATH || '').trim();
-  if (configured) return path.isAbsolute(configured) ? configured : path.join(__dirname, configured);
-  // Netlify Functions filesystem is not a normal persistent server disk. /tmp is writable at runtime.
-  if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT) {
-    return path.join('/tmp', 'dg.sqlite3');
-  }
-  return path.join(__dirname, 'dg.sqlite3');
-}
-
-const dbPath = resolveDbPath();
-try { fs.mkdirSync(path.dirname(dbPath), { recursive: true }); } catch {}
+const dbPath = path.join(__dirname, 'dg.sqlite3');
 const db = new sqlite3.Database(dbPath);
 
 function init() {

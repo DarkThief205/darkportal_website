@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_change_me';
 const BASE_URL = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || `http://localhost:${PORT}`;
 
-const CANONICAL_ORIGIN = normalizeOrigin(process.env.PUBLIC_CANONICAL_ORIGIN || process.env.CANONICAL_ORIGIN || '');
+const CANONICAL_ORIGIN = process.env.ENFORCE_CANONICAL_ORIGIN === 'true' ? normalizeOrigin(process.env.PUBLIC_CANONICAL_ORIGIN || process.env.CANONICAL_ORIGIN || '') : '';
 
 function normalizeOrigin(value) {
   try {
@@ -37,7 +37,9 @@ function requestOrigin(req) {
 
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
-const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || `${BASE_URL}/auth/discord/callback`;
+const DISCORD_REDIRECT_URI_ENV = process.env.DISCORD_REDIRECT_URI || '';
+function appBaseUrl(req) { return normalizeOrigin(process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || '') || requestOrigin(req); }
+function discordRedirectUri(req) { return normalizeOrigin(DISCORD_REDIRECT_URI_ENV) ? DISCORD_REDIRECT_URI_ENV : `${appBaseUrl(req)}/auth/discord/callback`; }
 const DISCORD_BOT_INVITE = process.env.DISCORD_BOT_INVITE || '';
 const SUPPORT_INVITE_URL = process.env.SUPPORT_INVITE_URL || 'https://discord.gg/bJ8dqwSCuU';
 const configuredBotStatusUrl = process.env.DISCORD_BOT_STATUS_URL || process.env.BOT_STATUS_URL || '';
@@ -88,12 +90,15 @@ const DISCORD_SCOPES = 'identify email guilds';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || `${BASE_URL}/auth/google/callback`;
+const GOOGLE_REDIRECT_URI_ENV = process.env.GOOGLE_REDIRECT_URI || '';
+function googleRedirectUri(req) { return normalizeOrigin(GOOGLE_REDIRECT_URI_ENV) ? GOOGLE_REDIRECT_URI_ENV : `${appBaseUrl(req)}/auth/google/callback`; }
 const GOOGLE_SCOPES = 'openid email profile';
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY || '';
-const STEAM_RETURN_URL = process.env.STEAM_RETURN_URL || `${BASE_URL}/auth/steam/callback`;
-const STEAM_REALM = process.env.STEAM_REALM || BASE_URL;
+const STEAM_RETURN_URL_ENV = process.env.STEAM_RETURN_URL || '';
+const STEAM_REALM_ENV = process.env.STEAM_REALM || '';
+function steamReturnUrl(req) { return normalizeOrigin(STEAM_RETURN_URL_ENV) ? STEAM_RETURN_URL_ENV : `${appBaseUrl(req)}/auth/steam/callback`; }
+function steamRealm(req) { return normalizeOrigin(STEAM_REALM_ENV) || appBaseUrl(req); }
 
 
 function isRealConfig(value) {
@@ -340,16 +345,58 @@ function verifyProviderLinkToken(provider, token) {
 }
 
 async function getBearerUser(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+  const headerAuth = req.headers.authorization;
+  let token = headerAuth && headerAuth.startsWith('Bearer ') ? headerAuth.slice(7) : '';
+  if (!token && req.headers.cookie) {
+    const match = String(req.headers.cookie || '').match(/(?:^|;\s*)dg_token=([^;]+)/);
+    if (match) token = decodeURIComponent(match[1]);
+  }
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     await dbReady;
-    req.user = jwt.verify(auth.slice(7), JWT_SECRET);
+    req.user = jwt.verify(token, JWT_SECRET);
     next();
   } catch (err) {
     const message = err && err.name === 'JsonWebTokenError' ? 'Invalid token' : 'Unauthorized';
     return res.status(401).json({ error: message });
   }
+}
+
+function tokenPayloadToUserRow(payload) {
+  if (!payload || !payload.id || !payload.username) return null;
+  return {
+    id: payload.id,
+    username: payload.username,
+    email: payload.email || null,
+    created: payload.created || Date.now(),
+    verified: payload.verified ? 1 : 0,
+    oauth_provider: payload.oauth_provider || null,
+    avatar_url: payload.avatar_url || null,
+    display_name: payload.display_name || payload.username,
+    discord_id: payload.discord_id || null,
+    discord_username: payload.discord_username || null,
+    discord_global_name: payload.discord_global_name || null,
+    discord_avatar: payload.discord_avatar || null,
+    discord_access_token: payload.discord_access_token || null,
+    discord_refresh_token: null,
+    discord_token_expires: payload.discord_token_expires || null,
+    google_id: payload.google_id || null,
+    google_name: payload.google_name || null,
+    google_avatar: payload.google_avatar || null,
+    steam_id: payload.steam_id || null,
+    steam_persona: payload.steam_persona || null,
+    steam_avatar: payload.steam_avatar || null,
+    steam_profile_url: payload.steam_profile_url || null,
+    apple_id: null,
+    apple_name: null,
+    apple_email: null
+  };
+}
+
+async function currentUserRow(req) {
+  let row = null;
+  try { row = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]); } catch {}
+  return row || tokenPayloadToUserRow(req.user);
 }
 
 function userAvatar(row) {
@@ -401,11 +448,26 @@ function signUser(row) {
     username: row.username,
     display_name: userDisplayName(row),
     email: row.email,
+    created: row.created || Date.now(),
     verified: !!row.verified,
     avatar_url: userAvatar(row),
+    oauth_provider: row.oauth_provider || null,
     discord_id: row.discord_id || null,
+    discord_username: row.discord_username || null,
+    discord_global_name: row.discord_global_name || null,
+    discord_avatar: row.discord_avatar || null,
+    // Netlify Functions do not provide a reliable persistent SQLite disk.
+    // Keep the short-lived Discord access token inside the signed session so
+    // the dashboard still works after the OAuth callback even if SQLite is cold.
+    discord_access_token: row.discord_access_token || null,
+    discord_token_expires: row.discord_token_expires || null,
     google_id: row.google_id || null,
-    steam_id: row.steam_id || null
+    google_name: row.google_name || null,
+    google_avatar: row.google_avatar || null,
+    steam_id: row.steam_id || null,
+    steam_persona: row.steam_persona || null,
+    steam_avatar: row.steam_avatar || null,
+    steam_profile_url: row.steam_profile_url || null
   }, JWT_SECRET, { expiresIn: '30d' });
 }
 
@@ -547,7 +609,12 @@ async function linkOAuthProviderToUser(provider, profile, userId) {
   if (!nowProviderId) throw new Error(`${providerDisplayName(provider)} did not return a usable account id.`);
 
   const target = await dbGet(`SELECT * FROM users WHERE id = ?`, [userId]);
-  if (!target) throw new Error('Your Dark Portal session expired. Sign in again and retry linking.');
+  if (!target) {
+    // On Netlify the SQLite file can be cold between the first provider login
+    // and a later provider-link callback. Do not throw the user back to login;
+    // complete the provider login as the active account instead.
+    return findOrCreateOAuthUser(provider, profile);
+  }
 
   const alreadyTaken = await dbGet(`SELECT id FROM users WHERE ${providerColumn} = ? AND id <> ?`, [nowProviderId, target.id]);
   if (alreadyTaken) throw new Error(`${providerDisplayName(provider)} is already linked to another Dark Portal account.`);
@@ -625,14 +692,33 @@ function finishBrowserLogin(res, row, next = '/dashboard.html') {
   const token = signUser(row);
   const profile = publicUser(row);
   const target = safeRedirect(next);
+  const cookieParts = [
+    `dg_token=${encodeURIComponent(token)}`,
+    'Path=/',
+    'Max-Age=2592000',
+    'SameSite=Lax'
+  ];
+  if ((process.env.BASE_URL || '').startsWith('https://') || process.env.NETLIFY) cookieParts.push('Secure');
+  res.setHeader('Set-Cookie', cookieParts.join('; '));
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.send(`<!doctype html>
 <meta charset="utf-8">
+<meta http-equiv="cache-control" content="no-store">
 <title>Login successful</title>
 <script>
-localStorage.setItem('dg_token', ${JSON.stringify(token)});
-localStorage.setItem('dg_session', ${JSON.stringify(row.username)});
-localStorage.setItem('dg_profile', ${JSON.stringify(JSON.stringify(profile))});
-location.replace(${JSON.stringify(target)});
+(function(){
+  var token = ${JSON.stringify(token)};
+  var username = ${JSON.stringify(row.username)};
+  var profile = ${JSON.stringify(JSON.stringify(profile))};
+  var target = ${JSON.stringify(target)};
+  try {
+    localStorage.setItem('dg_token', token);
+    localStorage.setItem('dg_session', username);
+    localStorage.setItem('dg_profile', profile);
+  } catch (e) {}
+  try { document.cookie = 'dg_token=' + encodeURIComponent(token) + '; Path=/; Max-Age=2592000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) {}
+  location.replace(target);
+})();
 </script>
 <p>Login successful. Redirecting...</p>`);
 }
@@ -693,7 +779,7 @@ app.get('/auth/discord', async (req, res) => {
   if (shouldUseLocalProviderFallback(req) || !isRealConfig(DISCORD_CLIENT_ID) || !isRealConfig(DISCORD_CLIENT_SECRET)) return finishLocalProviderLogin('discord', safeRedirect(req.query.next), res, req, req.query.link);
   const params = new URLSearchParams({
     client_id: DISCORD_CLIENT_ID,
-    redirect_uri: DISCORD_REDIRECT_URI,
+    redirect_uri: discordRedirectUri(req),
     response_type: 'code',
     scope: DISCORD_SCOPES,
     prompt: 'consent',
@@ -720,7 +806,7 @@ app.get('/auth/discord/callback', async (req, res) => {
         client_secret: DISCORD_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code: String(code),
-        redirect_uri: DISCORD_REDIRECT_URI
+        redirect_uri: discordRedirectUri(req)
       })
     });
     const tokenJson = await tokenResp.json();
@@ -754,7 +840,7 @@ app.get('/auth/google', async (req, res) => {
   if (shouldUseLocalProviderFallback(req) || !isRealConfig(GOOGLE_CLIENT_ID) || !isRealConfig(GOOGLE_CLIENT_SECRET)) return finishLocalProviderLogin('google', safeRedirect(req.query.next), res, req, req.query.link);
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: GOOGLE_REDIRECT_URI,
+    redirect_uri: googleRedirectUri(req),
     response_type: 'code',
     scope: GOOGLE_SCOPES,
     prompt: 'select_account',
@@ -781,7 +867,7 @@ app.get('/auth/google/callback', async (req, res) => {
         client_secret: GOOGLE_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code: String(code),
-        redirect_uri: GOOGLE_REDIRECT_URI
+        redirect_uri: googleRedirectUri(req)
       })
     });
     const tokenJson = await tokenResp.json();
@@ -813,12 +899,12 @@ app.get('/auth/steam', async (req, res) => {
   const next = safeRedirect(req.query.next);
   if (shouldUseLocalProviderFallback(req) || !isRealConfig(STEAM_API_KEY)) return finishLocalProviderLogin('steam', next, res, req, req.query.link);
   const state = encodeState(next, req.query.link);
-  const returnTo = `${STEAM_RETURN_URL}?state=${encodeURIComponent(state)}`;
+  const returnTo = `${steamReturnUrl(req)}?state=${encodeURIComponent(state)}`;
   const params = new URLSearchParams({
     'openid.ns': 'http://specs.openid.net/auth/2.0',
     'openid.mode': 'checkid_setup',
     'openid.return_to': returnTo,
-    'openid.realm': STEAM_REALM,
+    'openid.realm': steamRealm(req),
     'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
     'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select'
   });
@@ -1084,7 +1170,7 @@ async function buildStatsForUser(userId) {
 
 app.get('/api/dashboard', getBearerUser, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await currentUserRow(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const progress = await dbAll(
       `SELECT game_key, wins, losses, draws, best_score, xp, last_played, meta_json FROM game_progress WHERE user_id = ? ORDER BY last_played DESC`,
@@ -1112,7 +1198,7 @@ app.get('/api/dashboard/guild/:guildId', getBearerUser, async (req, res) => {
   try {
     const guildId = String(req.params.guildId || '').trim();
     if (!/^\d{5,30}$/.test(guildId)) return res.status(400).json({ error: 'Invalid guild id' });
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await currentUserRow(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const discordGuilds = await readDiscordManagedGuilds(user);
     const allowed = (discordGuilds.guilds || []).find((g) => String(g.id) === guildId);
@@ -1200,7 +1286,7 @@ app.patch('/api/dashboard/guild/:guildId/plugins', getBearerUser, async (req, re
   try {
     const guildId = String(req.params.guildId || '').trim();
     if (!/^\d{5,30}$/.test(guildId)) return res.status(400).json({ error: 'Invalid guild id' });
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await currentUserRow(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const discordGuilds = await readDiscordManagedGuilds(user);
     const allowed = (discordGuilds.guilds || []).find((g) => String(g.id) === guildId);
@@ -1218,7 +1304,7 @@ app.patch('/api/dashboard/guild/:guildId/plugins', getBearerUser, async (req, re
 
 app.get('/api/profile', getBearerUser, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await currentUserRow(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const stats = await buildStatsForUser(user.id);
     res.json({ user: publicUser(user), stats, supportInvite: SUPPORT_INVITE_URL });
@@ -1297,7 +1383,7 @@ app.delete('/api/profile', getBearerUser, async (req, res) => {
 
 app.get('/api/stats', getBearerUser, async (req, res) => {
   try {
-    const user = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const user = await currentUserRow(req);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
     const stats = await buildStatsForUser(user.id);
     res.json({ user: publicUser(user), stats });
@@ -1380,7 +1466,7 @@ app.post('/api/feedback', getBearerUser, async (req, res) => {
 
 app.get('/api/me', getBearerUser, async (req, res) => {
   try {
-    const row = await dbGet(`SELECT * FROM users WHERE id = ?`, [req.user.id]);
+    const row = await currentUserRow(req);
     if (!row) return res.status(401).json({ error: 'Unauthorized' });
     res.json(publicUser(row));
   } catch (err) {

@@ -1,7 +1,18 @@
 const serverless = require('serverless-http');
 const app = require('../../server');
 
-const handler = serverless(app);
+const handler = serverless(app, {
+  request: (request, event) => {
+    const headers = event.headers || {};
+    const proto = headers['x-forwarded-proto'] || headers['X-Forwarded-Proto'] || 'https';
+    const host = headers.host || headers.Host || 'localhost';
+    let pathname = event.path || request.url || '/';
+    pathname = pathname.replace(/^\/\.netlify\/functions\/api(?=\/|$)/, '') || '/';
+    request.url = pathname + (event.rawQuery ? `?${event.rawQuery}` : '');
+    request.headers['x-forwarded-proto'] = proto;
+    request.headers.host = host;
+  }
+});
 
 function queryString(event) {
   if (event.rawQuery) return event.rawQuery;
@@ -18,11 +29,8 @@ exports.handler = async (event, context) => {
   const host = headers.host || headers.Host || 'localhost';
   let pathname = event.path || '/';
 
-  // Netlify rewrites can invoke the function as /.netlify/functions/api/...
-  // Express must receive the original route: /api/..., /auth/..., /bot-invite, etc.
   pathname = pathname.replace(/^\/\.netlify\/functions\/api(?=\/|$)/, '') || '/';
   event.path = pathname;
-
   const qs = queryString(event);
   event.rawUrl = `${proto}://${host}${pathname}${qs ? `?${qs}` : ''}`;
 

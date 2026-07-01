@@ -1,5 +1,18 @@
 // auth.js — OAuth / provider login page with policy confirmation.
 const AUTH_SESSION_KEY = "dg_session";
+const AUTH_TOKEN_KEY = "dg_token";
+function readCookie(name) {
+  try {
+    const prefix = name + "=";
+    return document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith(prefix))?.slice(prefix.length) || "";
+  } catch { return ""; }
+}
+function importTokenFromCookie() {
+  if (localStorage.getItem(AUTH_TOKEN_KEY)) return;
+  const cookieToken = readCookie(AUTH_TOKEN_KEY);
+  if (cookieToken) { try { localStorage.setItem(AUTH_TOKEN_KEY, decodeURIComponent(cookieToken)); } catch {} }
+}
+importTokenFromCookie();
 
 function safeNext(value) {
   if (!value || typeof value !== "string") return "/dashboard.html";
@@ -11,7 +24,7 @@ function safeNext(value) {
 const urlParams = new URLSearchParams(window.location.search);
 const nextPath = safeNext(urlParams.get("next") || "/dashboard.html");
 
-function currentUser() { return localStorage.getItem(AUTH_SESSION_KEY) || null; }
+function currentUser() { return localStorage.getItem(AUTH_SESSION_KEY) || localStorage.getItem(AUTH_TOKEN_KEY) || null; }
 function go(provider) {
   // Always go through the backend OAuth route. The backend decides whether to use
   // real OAuth or a local/dev fallback based on .env. This keeps localhost working
@@ -88,7 +101,9 @@ function setupPolicyModal(){
   updateState();
 
   buttons.forEach(({ element, provider }) => {
-    element?.addEventListener('click', () => {
+    element?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (accept && !accept.checked) {
         if (hint) { hint.hidden = false; hint.textContent = 'Please confirm the Terms and Privacy Policy first.'; }
         accept?.focus();

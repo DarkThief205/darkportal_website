@@ -3,6 +3,22 @@ const DG_SESSION_KEY = "dg_session";
 const DG_TOKEN_KEY = "dg_token";
 const DG_PROFILE_KEY = "dg_profile";
 
+function readCookie(name) {
+  try {
+    const prefix = name + "=";
+    return document.cookie.split(";").map(v => v.trim()).find(v => v.startsWith(prefix))?.slice(prefix.length) || "";
+  } catch { return ""; }
+}
+
+function importTokenFromCookie() {
+  if (localStorage.getItem(DG_TOKEN_KEY)) return;
+  const cookieToken = readCookie(DG_TOKEN_KEY);
+  if (cookieToken) {
+    try { localStorage.setItem(DG_TOKEN_KEY, decodeURIComponent(cookieToken)); } catch {}
+  }
+}
+importTokenFromCookie();
+
 // --------------------- Theme ---------------------
 // White mode has been removed: the site always boots in the dark arena style.
 const body = document.body;
@@ -52,6 +68,7 @@ function logout() {
   localStorage.removeItem(DG_SESSION_KEY);
   localStorage.removeItem(DG_TOKEN_KEY);
   localStorage.removeItem(DG_PROFILE_KEY);
+  try { document.cookie = 'dg_token=; Path=/; Max-Age=0; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch {}
   updateTopbarAuth();
   try { updateProgressionUI(); } catch(e) {}
 }
