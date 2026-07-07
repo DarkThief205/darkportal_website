@@ -13583,3 +13583,22 @@ body.portal-home:not(.dashboard-page-v25):not(.portal-profile-body):not(.stats-p
     grid-template-columns:1fr!important;
   }
 }
+
+
+/* === v47: requested DarkBot logo restore ===
+   Keep the uploaded black-square DarkBot logo exactly, without the previous rounded icon/card wrapper. */
+.unified-brand-logo,
+.brand-logo,
+.game-brand .dynamic-game-logo .unified-brand-logo,
+.wordle-corner-logo img,
+.wordle-stage-logo img{
+  border-radius: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  object-fit: contain !important;
+}
+.unified-brand-logo,
+.brand-logo{
+  image-rendering: auto;
+}

@@ -80,3 +80,25 @@ For a stable public release, move the DB to Supabase, Neon, Turso, MongoDB Atlas
 ## Domain migration note
 
 Your current `darkportal.is-a.dev` record points to Netlify. After the Vercel preview works, update the is-a.dev DNS record to the value Vercel gives you for the custom domain.
+
+## Discord login redirecting to localhost
+
+If Discord login ever opens a localhost callback, check Vercel → Project → Settings → Environment Variables and make sure these are set for Production, Preview and Development as needed:
+
+```txt
+BASE_URL=https://darkportal.is-a.dev
+DISCORD_REDIRECT_URI=https://darkportal.is-a.dev/auth/discord/callback
+GOOGLE_REDIRECT_URI=https://darkportal.is-a.dev/auth/google/callback
+STEAM_RETURN_URL=https://darkportal.is-a.dev/auth/steam/callback
+PUBLIC_CANONICAL_ORIGIN=https://darkportal.is-a.dev
+ENFORCE_CANONICAL_ORIGIN=true
+ENABLE_LOCAL_PROVIDER_FALLBACK=false
+```
+
+Also add the exact Discord callback URL in Discord Developer Portal → OAuth2 → Redirects:
+
+```txt
+https://darkportal.is-a.dev/auth/discord/callback
+```
+
+This build also ignores stale localhost OAuth callback variables on live requests, so production users should not be sent to localhost even if an old local variable is accidentally left in Vercel.

@@ -39,8 +39,39 @@ function requestOrigin(req) {
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || process.env.CLIENT_SECRET;
 const DISCORD_REDIRECT_URI_ENV = process.env.DISCORD_REDIRECT_URI || '';
-function appBaseUrl(req) { return normalizeOrigin(process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || VERCEL_DEPLOY_ORIGIN || '') || requestOrigin(req); }
-function discordRedirectUri(req) { return normalizeOrigin(DISCORD_REDIRECT_URI_ENV) ? DISCORD_REDIRECT_URI_ENV : `${appBaseUrl(req)}/auth/discord/callback`; }
+function isLocalOriginValue(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return isLocalHostName(url.hostname);
+  } catch {
+    return false;
+  }
+}
+function firstSafeConfiguredOrigin(req) {
+  const candidates = [process.env.BASE_URL, process.env.URL, process.env.DEPLOY_PRIME_URL, VERCEL_DEPLOY_ORIGIN];
+  for (const value of candidates) {
+    const origin = normalizeOrigin(value || '');
+    if (!origin) continue;
+    // Never let a live production request inherit an old localhost BASE_URL from env vars.
+    if (isLocalOriginValue(origin) && !isLocalRequest(req)) continue;
+    return origin;
+  }
+  return requestOrigin(req);
+}
+function appBaseUrl(req) { return firstSafeConfiguredOrigin(req); }
+function providerRedirectUri(req, envValue, callbackPath) {
+  const raw = String(envValue || '').trim();
+  if (raw) {
+    try {
+      const url = new URL(raw);
+      // If Vercel still has a localhost redirect URI in Environment Variables,
+      // ignore it for live requests and build the callback from the current domain.
+      if (!(isLocalHostName(url.hostname) && !isLocalRequest(req))) return raw;
+    } catch {}
+  }
+  return `${appBaseUrl(req)}${callbackPath}`;
+}
+function discordRedirectUri(req) { return providerRedirectUri(req, DISCORD_REDIRECT_URI_ENV, '/auth/discord/callback'); }
 const DISCORD_BOT_INVITE = process.env.DISCORD_BOT_INVITE || '';
 const SUPPORT_INVITE_URL = process.env.SUPPORT_INVITE_URL || 'https://discord.gg/bJ8dqwSCuU';
 const configuredBotStatusUrl = process.env.DISCORD_BOT_STATUS_URL || process.env.BOT_STATUS_URL || '';
@@ -92,14 +123,17 @@ const DISCORD_SCOPES = 'identify email guilds';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI_ENV = process.env.GOOGLE_REDIRECT_URI || '';
-function googleRedirectUri(req) { return normalizeOrigin(GOOGLE_REDIRECT_URI_ENV) ? GOOGLE_REDIRECT_URI_ENV : `${appBaseUrl(req)}/auth/google/callback`; }
+function googleRedirectUri(req) { return providerRedirectUri(req, GOOGLE_REDIRECT_URI_ENV, '/auth/google/callback'); }
 const GOOGLE_SCOPES = 'openid email profile';
 
 const STEAM_API_KEY = process.env.STEAM_API_KEY || '';
 const STEAM_RETURN_URL_ENV = process.env.STEAM_RETURN_URL || '';
 const STEAM_REALM_ENV = process.env.STEAM_REALM || '';
-function steamReturnUrl(req) { return normalizeOrigin(STEAM_RETURN_URL_ENV) ? STEAM_RETURN_URL_ENV : `${appBaseUrl(req)}/auth/steam/callback`; }
-function steamRealm(req) { return normalizeOrigin(STEAM_REALM_ENV) || appBaseUrl(req); }
+function steamReturnUrl(req) { return providerRedirectUri(req, STEAM_RETURN_URL_ENV, '/auth/steam/callback'); }
+function steamRealm(req) {
+  const realm = normalizeOrigin(STEAM_REALM_ENV);
+  return (realm && !(isLocalOriginValue(realm) && !isLocalRequest(req))) ? realm : appBaseUrl(req);
+}
 
 
 function isRealConfig(value) {
@@ -115,7 +149,9 @@ function isLocalRequest(req) {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
 function allowLocalProviderFallback(req) {
-  return process.env.ENABLE_LOCAL_PROVIDER_FALLBACK !== 'false' && (isLocalBaseUrl() || isLocalRequest(req));
+  // Local fallback is only for actual localhost requests. A stale localhost BASE_URL
+  // in Vercel must not make the live site skip real Discord OAuth.
+  return process.env.ENABLE_LOCAL_PROVIDER_FALLBACK !== 'false' && isLocalRequest(req);
 }
 function shouldUseLocalProviderFallback(req) {
   // Localhost/dev OAuth often fails when OAuth client IDs or redirect URLs are placeholders.
