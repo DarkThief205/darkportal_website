@@ -122,6 +122,7 @@
   const WORDLE_STATE_KEY = 'darkportal_wordle_state_v2';
   const CLOUD_WORDLE_STATS_KEY = 'wordle_stats_v2';
   const CLOUD_WORDLE_STATE_KEY = 'wordle_state_v2';
+  const WORDLE_PROGRESS_QUEUE_KEY = 'darkportal_wordle_progress_queue_v1';
   let wordleStatsSaveTimer = null;
   let wordleStateSaveTimer = null;
   let state = null;
@@ -204,6 +205,56 @@
   async function wordleLoadCloud(key) {
     const payload = await wordleCloudRequest('/api/games/save/' + encodeURIComponent(key), { method: 'GET' });
     return payload?.data || null;
+  }
+
+  function readWordleProgressQueue() {
+    try {
+      const list = JSON.parse(localStorage.getItem(WORDLE_PROGRESS_QUEUE_KEY) || '[]');
+      return Array.isArray(list) ? list.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeWordleProgressQueue(list) {
+    try { localStorage.setItem(WORDLE_PROGRESS_QUEUE_KEY, JSON.stringify(Array.isArray(list) ? list.slice(-25) : [])); } catch (_) {}
+  }
+
+  function makeWordleEventId(result, attempts) {
+    const guesses = Array.isArray(state?.guesses) ? state.guesses.map((g) => g.guess || '').join('-') : '';
+    const base = [state?.mode, state?.date || todayKey(), state?.length, state?.difficulty, state?.answer, attempts, result, guesses].join(':');
+    return 'wordle-' + hashString(base).toString(36) + '-' + hashString(base.split('').reverse().join('')).toString(36);
+  }
+
+  function enqueueWordleProgress(event) {
+    if (!event || !event.eventId) return;
+    const queue = readWordleProgressQueue();
+    if (!queue.some((item) => item && item.eventId === event.eventId)) {
+      queue.push(event);
+      writeWordleProgressQueue(queue);
+    }
+  }
+
+  async function postWordleProgress(event) {
+    return wordleCloudRequest('/api/games/progress/wordle', {
+      method: 'POST',
+      keepalive: true,
+      body: JSON.stringify(event)
+    });
+  }
+
+  async function flushWordleProgressQueue() {
+    const queue = readWordleProgressQueue();
+    if (!queue.length) return;
+    const remaining = [];
+    for (const event of queue) {
+      try {
+        await postWordleProgress(event);
+      } catch (_) {
+        remaining.push(event);
+      }
+    }
+    writeWordleProgressQueue(remaining);
   }
 
   function debounceWordleStatsSave(stats) {
@@ -714,21 +765,24 @@
     setStats(stats);
     updateHud();
 
-    const token = wordleAuthToken();
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (token) headers.Authorization = 'Bearer ' + token;
-      await fetch('/api/games/progress/wordle', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          result,
-          score,
-          meta: { mode: state.mode, length: state.length, difficulty: state.difficulty, attempts, answer: state.answer, date: todayKey() }
-        })
-      });
-    } catch (_) {}
+    const eventId = makeWordleEventId(result, attempts);
+    const event = {
+      eventId,
+      result,
+      score,
+      meta: {
+        event_id: eventId,
+        mode: state.mode,
+        length: state.length,
+        difficulty: state.difficulty,
+        attempts,
+        answer: state.answer,
+        date: todayKey(),
+        guesses: Array.isArray(state.guesses) ? state.guesses.map((g) => g.guess || '') : []
+      }
+    };
+    enqueueWordleProgress(event);
+    try { await flushWordleProgressQueue(); } catch (_) {}
   }
 
   function finish(win) {
@@ -999,6 +1053,7 @@
       const stats = getStats();
       if (stats && Number(stats.updatedAt || 0)) wordleSaveCloud(CLOUD_WORDLE_STATS_KEY, stats).catch(() => {});
     } catch (_) {}
+    try { flushWordleProgressQueue().catch(() => {}); } catch (_) {}
   }
   window.addEventListener('pagehide', flushWordleCloudSaves);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushWordleCloudSaves(); });
@@ -1006,6 +1061,7 @@
   async function bootWordle() {
     updateStepVisibility();
     await hydrateWordleCloud();
+    try { await flushWordleProgressQueue(); } catch (_) {}
     if (!restoreWordleStateFromLocal()) updateHud();
   }
   bootWordle();

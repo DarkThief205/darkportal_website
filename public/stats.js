@@ -21,6 +21,52 @@
   function normKey(k){ return String(k || '').toLowerCase(); }
   function row(label, value, hint=''){ return `<div class="stat-row-v22 stat-row-v29 stat-row-v30"><span>${esc(label)}</span><b>${esc(value)}</b>${hint ? `<small>${esc(hint)}</small>` : ''}</div>`; }
   function gameLookup(games, pattern){ return games.filter(g => pattern.test(normKey(g.game_key))); }
+  function localWordleStats(){
+    try {
+      const st = JSON.parse(localStorage.getItem('darkportal_wordle_stats_v2') || '{}');
+      return st && typeof st === 'object' ? st : {};
+    } catch { return {}; }
+  }
+  function mergeLocalWordle(serverRow){
+    const local = localWordleStats();
+    const localWins = num(local.wins);
+    const localLosses = num(local.losses);
+    const localPlayed = num(local.played) || localWins + localLosses;
+    if (!localPlayed) return serverRow;
+    const serverPlayed = gamePlayed(serverRow);
+    if (localPlayed <= serverPlayed) return serverRow;
+    return Object.assign({}, serverRow || { game_key:'wordle' }, {
+      game_key: 'wordle',
+      wins: Math.max(num(serverRow?.wins), localWins),
+      losses: Math.max(num(serverRow?.losses), localLosses),
+      draws: num(serverRow?.draws),
+      best_score: Math.max(num(serverRow?.best_score), num(local.bestScore)),
+      xp: Math.max(num(serverRow?.xp), localWins * 50 + localLosses * 10),
+      last_played: Math.max(num(serverRow?.last_played), num(local.updatedAt))
+    });
+  }
+  function readWordleProgressQueue(){
+    try { const q = JSON.parse(localStorage.getItem('darkportal_wordle_progress_queue_v1') || '[]'); return Array.isArray(q) ? q : []; } catch { return []; }
+  }
+  function writeWordleProgressQueue(q){ try { localStorage.setItem('darkportal_wordle_progress_queue_v1', JSON.stringify(Array.isArray(q) ? q.slice(-25) : [])); } catch {} }
+  async function flushWordleProgressQueue(token){
+    const queue = readWordleProgressQueue();
+    if (!queue.length || !token) return;
+    const remaining = [];
+    for (const event of queue) {
+      try {
+        const res = await fetch('/api/games/progress/wordle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', authorization: 'Bearer ' + token },
+          credentials: 'same-origin',
+          cache: 'no-store',
+          body: JSON.stringify(event)
+        });
+        if (!res.ok) throw new Error('progress save failed');
+      } catch { remaining.push(event); }
+    }
+    writeWordleProgressQueue(remaining);
+  }
   function detailsBlock(id, title, summary, body){
     return `<article class="stats-accordion-v29 stats-accordion-v30"><button class="stats-accordion-head-v29 stats-accordion-head-v30" data-stat-toggle="${esc(id)}" type="button" aria-expanded="false"><span><strong>${esc(title)}</strong><small>${esc(summary)}</small></span><b aria-hidden="true">+</b></button><div class="stats-accordion-body-v29 stats-accordion-body-v30" id="${esc(id)}" hidden>${body}</div></article>`;
   }
@@ -31,7 +77,7 @@
     const games = Array.isArray(s.games) ? s.games : [];
     const ttt = s.tictactoe || gameLookup(games, /tictactoe|tic/)[0] || { game_key:'tictactoe' };
     const sudokuList = Array.isArray(s.sudoku) ? s.sudoku : gameLookup(games, /sudoku|sumdoku|killer/);
-    const wordle = gameLookup(games, /wordle|word/)[0] || { game_key:'wordle' };
+    const wordle = mergeLocalWordle(gameLookup(games, /wordle|word/)[0] || { game_key:'wordle' });
     const totals = s.totals || {};
     const totalPlayed = num(totals.gamesPlayed) || games.reduce((a,g)=>a+gamePlayed(g),0);
     const totalWins = num(totals.wins) || games.reduce((a,g)=>a+num(g.wins),0);
@@ -78,6 +124,7 @@
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     try {
+      await flushWordleProgressQueue(token);
       const res = await fetch('/api/stats', { headers:{ authorization:'Bearer ' + token }, cache:'no-store', signal: controller.signal });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Unauthorized');

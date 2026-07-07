@@ -1171,15 +1171,67 @@ async function buildStatsForUser(userId) {
     `SELECT game_key, wins, losses, draws, best_score, xp, last_played, meta_json FROM game_progress WHERE user_id = ? ORDER BY last_played DESC`,
     [userId]
   );
+
+  // Some games also maintain richer cloud-save snapshots.  If a player finished
+  // a Wordle round while a progress POST was interrupted, use the saved Wordle
+  // stats as a safe display fallback so /stats reflects the latest cloud state.
+  const saveRows = await dbAll(
+    `SELECT save_key, data_json, updated_at FROM game_saves WHERE user_id = ? AND save_key IN (?, ?, ?, ?)`,
+    [userId, 'wordle_stats_v2', 'wordle_state_v2', 'sudoku_progress_v1', 'sudoku_current_v4']
+  ).catch(() => []);
+
+  const saves = {};
+  for (const row of saveRows || []) {
+    try { saves[row.save_key] = JSON.parse(row.data_json || '{}'); } catch (_) { saves[row.save_key] = {}; }
+  }
+
+  const mergedProgress = [...progress];
+  const wordleStats = saves.wordle_stats_v2 || null;
+  if (wordleStats && typeof wordleStats === 'object') {
+    const idx = mergedProgress.findIndex((g) => String(g.game_key || '').toLowerCase() === 'wordle');
+    const savedWins = Number(wordleStats.wins || 0);
+    const savedLosses = Number(wordleStats.losses || 0);
+    const savedPlayed = Number(wordleStats.played || savedWins + savedLosses || 0);
+    const savedBest = Number(wordleStats.bestScore || 0);
+    const savedUpdated = Number(wordleStats.updatedAt || saves.wordle_state_v2?.updatedAt || 0);
+    if (savedPlayed > 0) {
+      if (idx >= 0) {
+        const current = mergedProgress[idx];
+        const currentPlayed = Number(current.wins || 0) + Number(current.losses || 0) + Number(current.draws || 0);
+        if (savedPlayed > currentPlayed) {
+          mergedProgress[idx] = {
+            ...current,
+            wins: Math.max(Number(current.wins || 0), savedWins),
+            losses: Math.max(Number(current.losses || 0), savedLosses),
+            best_score: Math.max(Number(current.best_score || 0), savedBest),
+            last_played: Math.max(Number(current.last_played || 0), savedUpdated || 0),
+            meta_json: JSON.stringify({ ...parseProgressMeta(current), source: 'cloud_save_fallback' })
+          };
+        }
+      } else {
+        mergedProgress.push({
+          game_key: 'wordle',
+          wins: savedWins,
+          losses: savedLosses,
+          draws: 0,
+          best_score: savedBest,
+          xp: Math.max(0, savedWins * 50 + savedLosses * 10),
+          last_played: savedUpdated || null,
+          meta_json: JSON.stringify({ source: 'cloud_save_fallback' })
+        });
+      }
+    }
+  }
+
   const feedbackCountRow = await dbGet(`SELECT COUNT(*) AS c FROM portal_feedback WHERE user_id = ?`, [userId]).catch(() => ({ c: 0 }));
-  const totalWins = progress.reduce((a, p) => a + Number(p.wins || 0), 0);
-  const totalLosses = progress.reduce((a, p) => a + Number(p.losses || 0), 0);
-  const totalDraws = progress.reduce((a, p) => a + Number(p.draws || 0), 0);
-  const gameXp = progress.reduce((a, p) => a + Number(p.xp || 0), 0);
+  const totalWins = mergedProgress.reduce((a, p) => a + Number(p.wins || 0), 0);
+  const totalLosses = mergedProgress.reduce((a, p) => a + Number(p.losses || 0), 0);
+  const totalDraws = mergedProgress.reduce((a, p) => a + Number(p.draws || 0), 0);
+  const gameXp = mergedProgress.reduce((a, p) => a + Number(p.xp || 0), 0);
   const feedbackXp = Number(feedbackCountRow?.c || 0) * 15;
-  const portalXp = feedbackXp + Math.min(250, progress.length * 20);
+  const portalXp = feedbackXp + Math.min(250, mergedProgress.length * 20);
   const xp = xpLevel(gameXp + portalXp);
-  const byGame = progress.map((row) => ({ ...row, meta: parseProgressMeta(row) }));
+  const byGame = mergedProgress.map((row) => ({ ...row, meta: parseProgressMeta(row) }));
   const ttt = byGame.find((g) => /tictactoe|tic/.test(g.game_key)) || null;
   const sudoku = byGame.filter((g) => /sudoku|sumdoku|killer/.test(g.game_key));
   return {
@@ -1444,7 +1496,7 @@ app.get('/api/games/progress/:game', getBearerUser, (req, res) => {
   );
 });
 
-app.post('/api/games/progress/:game', getBearerUser, (req, res) => {
+app.post('/api/games/progress/:game', getBearerUser, async (req, res) => {
   const game = String(req.params.game || '').trim().toLowerCase();
   if (!/^[a-z0-9_-]{2,40}$/.test(game)) return res.status(400).json({ error: 'Invalid game key' });
 
@@ -1452,36 +1504,57 @@ app.post('/api/games/progress/:game', getBearerUser, (req, res) => {
   const score = Number.isFinite(Number(req.body.score)) ? Math.max(0, Math.floor(Number(req.body.score))) : 0;
   const meta = req.body.meta && typeof req.body.meta === 'object' ? req.body.meta : {};
   const now = Date.now();
+  const eventIdRaw = req.body.eventId || req.body.event_id || meta.eventId || meta.event_id || '';
+  const eventId = String(eventIdRaw || '').trim().slice(0, 120).replace(/[^a-zA-Z0-9_.:-]/g, '');
 
   const wins = result === 'win' ? 1 : 0;
   const losses = result === 'loss' ? 1 : 0;
   const draws = result === 'draw' ? 1 : 0;
   const xpGain = Math.max(5, Math.min(250, score || (wins ? 50 : draws ? 20 : 10)));
-  const metaJson = JSON.stringify({ ...meta, last_result: result || 'played' }).slice(0, 2000);
+  const metaJson = JSON.stringify({ ...meta, event_id: eventId || undefined, last_result: result || 'played' }).slice(0, 2000);
 
-  db.run(
-    `INSERT INTO game_progress (user_id, game_key, wins, losses, draws, best_score, xp, last_played, meta_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, game_key) DO UPDATE SET
-       wins = wins + excluded.wins,
-       losses = losses + excluded.losses,
-       draws = draws + excluded.draws,
-       best_score = MAX(best_score, excluded.best_score),
-       xp = xp + excluded.xp,
-       last_played = excluded.last_played,
-       meta_json = excluded.meta_json`,
-    [req.user.id, game, wins, losses, draws, score, xpGain, now, metaJson],
-    (err) => {
-      if (err) return res.status(500).json({ error: 'Could not save progress' });
-      db.get(
-        `SELECT game_key, wins, losses, draws, best_score, xp, last_played, meta_json FROM game_progress WHERE user_id = ? AND game_key = ?`,
-        [req.user.id, game],
-        (readErr, row) => readErr ? res.status(500).json({ error: 'Could not read progress' }) : res.json(row)
+  try {
+    if (eventId) {
+      const inserted = await dbGet(
+        `INSERT INTO game_progress_events (user_id, game_key, event_key, result, score, meta_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, game_key, event_key) DO NOTHING
+         RETURNING id`,
+        [req.user.id, game, eventId, result, score, metaJson, now]
       );
+      if (!inserted) {
+        const row = await dbGet(
+          `SELECT game_key, wins, losses, draws, best_score, xp, last_played, meta_json FROM game_progress WHERE user_id = ? AND game_key = ?`,
+          [req.user.id, game]
+        );
+        return res.json(row || { game_key: game, wins: 0, losses: 0, draws: 0, best_score: 0, xp: 0, last_played: null, meta_json: '{}', duplicate: true });
+      }
     }
-  );
-});
 
+    await dbRun(
+      `INSERT INTO game_progress (user_id, game_key, wins, losses, draws, best_score, xp, last_played, meta_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, game_key) DO UPDATE SET
+         wins = game_progress.wins + EXCLUDED.wins,
+         losses = game_progress.losses + EXCLUDED.losses,
+         draws = game_progress.draws + EXCLUDED.draws,
+         best_score = GREATEST(game_progress.best_score, EXCLUDED.best_score),
+         xp = game_progress.xp + EXCLUDED.xp,
+         last_played = EXCLUDED.last_played,
+         meta_json = EXCLUDED.meta_json`,
+      [req.user.id, game, wins, losses, draws, score, xpGain, now, metaJson]
+    );
+
+    const row = await dbGet(
+      `SELECT game_key, wins, losses, draws, best_score, xp, last_played, meta_json FROM game_progress WHERE user_id = ? AND game_key = ?`,
+      [req.user.id, game]
+    );
+    res.json(row);
+  } catch (err) {
+    console.error('game progress save error', err);
+    res.status(500).json({ error: 'Could not save progress' });
+  }
+});
 
 function cleanSaveKey(value) {
   const key = String(value || '').trim().toLowerCase();
