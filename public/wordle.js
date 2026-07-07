@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const FIVE_ANSWERS = [
     'apple','arena','angel','baker','beach','beast','black','bloom','brave','brick','bring','brown','cable','candy','charm','chase','chess','cloud','crane','crown','dance','dream','earth','elite','flame','forge','ghost','glass','glory','grace','grape','green','heart','honey','house','laser','level','light','logic','loyal','magic','money','night','north','ocean','orbit','paint','party','pearl','phase','piano','pixel','plant','power','pride','prism','quest','radar','river','robot','round','royal','rules','sharp','skill','slate','solid','sound','south','space','spark','spike','stone','storm','sword','tiger','tower','trace','train','trust','valid','vivid','water','white','world','youth','zebra'
   ];
@@ -157,15 +157,38 @@
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
+  function readWordleCookie(name) {
+    try {
+      const prefix = name + '=';
+      const found = document.cookie.split(';').map((v) => v.trim()).find((v) => v.startsWith(prefix));
+      return found ? decodeURIComponent(found.slice(prefix.length)) : '';
+    } catch {
+      return '';
+    }
+  }
+
   function wordleAuthToken() {
-    return localStorage.getItem(window.DGAuth?.TOKEN_KEY || 'dg_token') || '';
+    const key = window.DGAuth?.TOKEN_KEY || 'dg_token';
+    const stored = localStorage.getItem(key) || '';
+    if (stored) return stored;
+    const cookieToken = readWordleCookie(key);
+    if (cookieToken) {
+      try { localStorage.setItem(key, cookieToken); } catch (_) {}
+    }
+    return cookieToken || '';
   }
 
   async function wordleCloudRequest(url, options = {}) {
     const token = wordleAuthToken();
-    if (!token) return null;
-    const headers = Object.assign({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, options.headers || {});
-    const res = await fetch(url, Object.assign({}, options, { headers, cache: 'no-store' }));
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const res = await fetch(url, Object.assign({}, options, {
+      headers,
+      cache: 'no-store',
+      credentials: 'same-origin',
+      keepalive: !!options.keepalive
+    }));
+    if (res.status === 401) return null;
     if (res.status === 404) return null;
     if (!res.ok) throw new Error('Cloud save failed');
     return res.json();
@@ -184,7 +207,6 @@
   }
 
   function debounceWordleStatsSave(stats) {
-    if (!wordleAuthToken()) return;
     clearTimeout(wordleStatsSaveTimer);
     const snapshot = JSON.parse(JSON.stringify(stats || {}));
     wordleStatsSaveTimer = setTimeout(() => {
@@ -218,7 +240,6 @@
     const snapshot = serializeWordleState();
     if (!snapshot) return;
     localStorage.setItem(WORDLE_STATE_KEY, JSON.stringify(snapshot));
-    if (!wordleAuthToken()) return;
     clearTimeout(wordleStateSaveTimer);
     const doSave = () => wordleSaveCloud(CLOUD_WORDLE_STATE_KEY, snapshot).catch(() => {});
     if (immediate) doSave();
@@ -237,6 +258,7 @@
   }
 
   async function hydrateWordleCloud() {
+    try { await window.DGAuth?.syncSessionFromToken?.(); } catch (_) {}
     if (!wordleAuthToken()) return;
     try {
       const cloudStats = await wordleLoadCloud(CLOUD_WORDLE_STATS_KEY);
@@ -692,12 +714,14 @@
     setStats(stats);
     updateHud();
 
-    const token = localStorage.getItem(window.DGAuth?.TOKEN_KEY || 'dg_token');
-    if (!token) return;
+    const token = wordleAuthToken();
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
       await fetch('/api/games/progress/wordle', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        headers,
+        credentials: 'same-origin',
         body: JSON.stringify({
           result,
           score,
@@ -965,6 +989,19 @@
     if (/^[a-zA-Z]$/.test(event.key) && !typingInInput) { event.preventDefault(); typeLetter(event.key); }
   });
   document.querySelectorAll('[data-wordle-modal-close]').forEach((btn) => btn.addEventListener('click', closeModal));
+
+
+
+  function flushWordleCloudSaves() {
+    if (!state) return;
+    try { saveWordleState(true); } catch (_) {}
+    try {
+      const stats = getStats();
+      if (stats && Number(stats.updatedAt || 0)) wordleSaveCloud(CLOUD_WORDLE_STATS_KEY, stats).catch(() => {});
+    } catch (_) {}
+  }
+  window.addEventListener('pagehide', flushWordleCloudSaves);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushWordleCloudSaves(); });
 
   async function bootWordle() {
     updateStepVisibility();

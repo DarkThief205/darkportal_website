@@ -198,15 +198,37 @@ const CLOUD_PROGRESS_SAVE_KEY = "sudoku_progress_v1";
 let sudokuCloudSaveTimer = null;
 let sudokuCloudProgressTimer = null;
 
+function readSudokuCookie(name) {
+  try {
+    const prefix = name + "=";
+    const found = document.cookie.split(";").map((v) => v.trim()).find((v) => v.startsWith(prefix));
+    return found ? decodeURIComponent(found.slice(prefix.length)) : "";
+  } catch (e) {
+    return "";
+  }
+}
+
 function sudokuAuthToken() {
-  return localStorage.getItem(TOKEN_KEY) || "";
+  const stored = localStorage.getItem(TOKEN_KEY) || "";
+  if (stored) return stored;
+  const cookieToken = readSudokuCookie(TOKEN_KEY);
+  if (cookieToken) {
+    try { localStorage.setItem(TOKEN_KEY, cookieToken); } catch(e) {}
+  }
+  return cookieToken || "";
 }
 
 async function cloudFetchJson(url, options = {}) {
   const token = sudokuAuthToken();
-  if (!token) return null;
-  const headers = Object.assign({ "content-type": "application/json", authorization: "Bearer " + token }, options.headers || {});
-  const res = await fetch(url, Object.assign({}, options, { headers, cache: "no-store" }));
+  const headers = Object.assign({ "content-type": "application/json" }, options.headers || {});
+  if (token) headers.authorization = "Bearer " + token;
+  const res = await fetch(url, Object.assign({}, options, {
+    headers,
+    cache: "no-store",
+    credentials: "same-origin",
+    keepalive: !!options.keepalive
+  }));
+  if (res.status === 401) return null;
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Cloud save failed");
   return res.json();
@@ -229,7 +251,6 @@ async function deleteCloudData(saveKey) {
 }
 
 function debounceSudokuCloudSave(data) {
-  if (!sudokuAuthToken()) return;
   clearTimeout(sudokuCloudSaveTimer);
   const snapshot = JSON.parse(JSON.stringify(data || {}));
   sudokuCloudSaveTimer = setTimeout(() => {
@@ -249,7 +270,6 @@ function collectSudokuProgressMap() {
 }
 
 function debounceSudokuProgressCloudSave() {
-  if (!sudokuAuthToken()) return;
   clearTimeout(sudokuCloudProgressTimer);
   sudokuCloudProgressTimer = setTimeout(() => {
     saveCloudData(CLOUD_PROGRESS_SAVE_KEY, { items: collectSudokuProgressMap(), updatedAt: Date.now() }).catch(() => {});
@@ -548,14 +568,21 @@ function writeUserProgress(user, variant, diff, newProgress) {
 }
 async function recordSudokuProgress(result = 'win') {
   try {
-    const token = localStorage.getItem('dg_token');
-    if (!token) return;
+    // Use the same auth fallback as cloud saves: localStorage first, then dg_token cookie.
+    // This makes Sudoku stats survive cases where the user is logged in via cookie but
+    // localStorage was cleared or stale.
+    const token = sudokuAuthToken();
     const scoreByDiff = { easy: 60, medium: 100, hard: 155, extreme: 230 };
-    const score = scoreByDiff[difficulty] || 100;
+    const win = String(result || '').toLowerCase() === 'win';
+    const score = win ? (scoreByDiff[difficulty] || 100) : Math.max(5, Math.floor((scoreByDiff[difficulty] || 100) / 5));
     const key = gameVariant === 'killer' ? 'sumdoku' : 'sudoku';
+    const headers = { 'content-type': 'application/json' };
+    if (token) headers.authorization = 'Bearer ' + token;
     await fetch('/api/games/progress/' + key, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      headers,
+      credentials: 'same-origin',
+      cache: 'no-store',
       body: JSON.stringify({ result, score, meta: { variant: gameVariant, difficulty, seconds, mistakes, hintsUsed } })
     });
   } catch (e) {}
@@ -1443,6 +1470,7 @@ function onSolved() {
 function gameOver(reason) {
   stopTimer();
   gameLocked = true;
+  recordSudokuProgress('loss');
   gridEl?.classList.add("locked");
   updateHintUI();
   setSolveButtonMode("solve");
@@ -1660,7 +1688,17 @@ document.addEventListener("keydown", (e) => {
   if (e.key >= "1" && e.key <= "9") pad(Number(e.key));
   if (e.key === "Backspace" || e.key === "Delete" || e.key === "0") padClear();
 });
+function flushSudokuCloudSaves() {
+  try {
+    saveGame();
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) saveCloudData(CLOUD_CURRENT_SAVE_KEY, JSON.parse(raw)).catch(() => {});
+    saveCloudData(CLOUD_PROGRESS_SAVE_KEY, { items: collectSudokuProgressMap(), updatedAt: Date.now() }).catch(() => {});
+  } catch(e) {}
+}
 window.addEventListener("beforeunload", saveGame);
+window.addEventListener("pagehide", flushSudokuCloudSaves);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushSudokuCloudSaves(); });
 
 // --------------------- Boot ---------------------
 async function bootSudoku() {
