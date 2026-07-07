@@ -119,6 +119,11 @@
     expert: { label: 'Expert', max: 5, hard: true, xp: 98 }
   };
   const STORAGE_KEY = 'darkportal_wordle_stats_v2';
+  const WORDLE_STATE_KEY = 'darkportal_wordle_state_v2';
+  const CLOUD_WORDLE_STATS_KEY = 'wordle_stats_v2';
+  const CLOUD_WORDLE_STATE_KEY = 'wordle_state_v2';
+  let wordleStatsSaveTimer = null;
+  let wordleStateSaveTimer = null;
   let state = null;
   let toastTimer = null;
   let keyboardPlaced = false;
@@ -152,6 +157,108 @@
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
+  function wordleAuthToken() {
+    return localStorage.getItem(window.DGAuth?.TOKEN_KEY || 'dg_token') || '';
+  }
+
+  async function wordleCloudRequest(url, options = {}) {
+    const token = wordleAuthToken();
+    if (!token) return null;
+    const headers = Object.assign({ 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, options.headers || {});
+    const res = await fetch(url, Object.assign({}, options, { headers, cache: 'no-store' }));
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('Cloud save failed');
+    return res.json();
+  }
+
+  async function wordleSaveCloud(key, data) {
+    return wordleCloudRequest('/api/games/save/' + encodeURIComponent(key), {
+      method: 'PUT',
+      body: JSON.stringify({ data })
+    });
+  }
+
+  async function wordleLoadCloud(key) {
+    const payload = await wordleCloudRequest('/api/games/save/' + encodeURIComponent(key), { method: 'GET' });
+    return payload?.data || null;
+  }
+
+  function debounceWordleStatsSave(stats) {
+    if (!wordleAuthToken()) return;
+    clearTimeout(wordleStatsSaveTimer);
+    const snapshot = JSON.parse(JSON.stringify(stats || {}));
+    wordleStatsSaveTimer = setTimeout(() => {
+      wordleSaveCloud(CLOUD_WORDLE_STATS_KEY, snapshot).catch(() => {});
+    }, 700);
+  }
+
+  function serializeWordleState() {
+    if (!state) return null;
+    return {
+      mode: state.mode,
+      length: state.length,
+      difficulty: state.difficulty,
+      maxRows: state.maxRows,
+      answer: state.answer,
+      row: state.row,
+      current: state.current || '',
+      done: !!state.done,
+      guesses: Array.isArray(state.guesses) ? state.guesses : [],
+      keyboard: state.keyboard || {},
+      constraints: {
+        greens: state.constraints?.greens || {},
+        yellows: Array.from(state.constraints?.yellows || [])
+      },
+      date: state.date || todayKey(),
+      updatedAt: Date.now()
+    };
+  }
+
+  function saveWordleState(immediate = false) {
+    const snapshot = serializeWordleState();
+    if (!snapshot) return;
+    localStorage.setItem(WORDLE_STATE_KEY, JSON.stringify(snapshot));
+    if (!wordleAuthToken()) return;
+    clearTimeout(wordleStateSaveTimer);
+    const doSave = () => wordleSaveCloud(CLOUD_WORDLE_STATE_KEY, snapshot).catch(() => {});
+    if (immediate) doSave();
+    else wordleStateSaveTimer = setTimeout(doSave, 900);
+  }
+
+  function loadLocalWordleState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(WORDLE_STATE_KEY) || 'null');
+      if (!saved || !saved.answer || !saved.length || !Array.isArray(saved.guesses)) return null;
+      if (saved.mode === 'daily' && saved.date && saved.date !== todayKey() && !saved.done) return null;
+      return saved;
+    } catch {
+      return null;
+    }
+  }
+
+  async function hydrateWordleCloud() {
+    if (!wordleAuthToken()) return;
+    try {
+      const cloudStats = await wordleLoadCloud(CLOUD_WORDLE_STATS_KEY);
+      if (cloudStats && typeof cloudStats === 'object') {
+        let localStats = null;
+        try { localStats = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (_) {}
+        if (!localStats || Number(cloudStats.updatedAt || 0) >= Number(localStats.updatedAt || 0)) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudStats));
+        }
+      }
+    } catch (_) {}
+    try {
+      const cloudState = await wordleLoadCloud(CLOUD_WORDLE_STATE_KEY);
+      if (cloudState && typeof cloudState === 'object') {
+        const localState = loadLocalWordleState();
+        if (!localState || Number(cloudState.updatedAt || 0) >= Number(localState.updatedAt || 0)) {
+          localStorage.setItem(WORDLE_STATE_KEY, JSON.stringify(cloudState));
+        }
+      }
+    } catch (_) {}
+  }
+
   function getStats() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
@@ -163,15 +270,18 @@
         bestStreak: Number(parsed.bestStreak || 0),
         bestScore: Number(parsed.bestScore || 0),
         daily: parsed.daily && typeof parsed.daily === 'object' ? parsed.daily : {},
-        distribution: parsed.distribution && typeof parsed.distribution === 'object' ? parsed.distribution : {}
+        distribution: parsed.distribution && typeof parsed.distribution === 'object' ? parsed.distribution : {},
+        updatedAt: Number(parsed.updatedAt || 0)
       };
     } catch {
-      return { played: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0, bestScore: 0, daily: {}, distribution: {} };
+      return { played: 0, wins: 0, losses: 0, streak: 0, bestStreak: 0, bestScore: 0, daily: {}, distribution: {}, updatedAt: 0 };
     }
   }
 
   function setStats(stats) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+    const payload = Object.assign({}, stats || {}, { updatedAt: Date.now() });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    debounceWordleStatsSave(payload);
   }
 
   function section(name) {
@@ -482,6 +592,65 @@
     });
   }
 
+  function paintSavedGuess(rowIndex, guess, result) {
+    (result || []).forEach((status, col) => {
+      const tile = tileAt(rowIndex, col);
+      if (!tile) return;
+      tile.textContent = guess[col] || '';
+      tile.classList.add('is-filled', 'is-revealed', `is-${status}`);
+      tile.dataset.status = status;
+      updateKeyboard(guess[col], status);
+    });
+  }
+
+  function applySavedKeyboard() {
+    Object.entries(state?.keyboard || {}).forEach(([letter, status]) => updateKeyboard(letter, status));
+  }
+
+  function restoreWordleStateFromLocal() {
+    const saved = loadLocalWordleState();
+    if (!saved) return false;
+    const difficulty = DIFFICULTY[saved.difficulty] || DIFFICULTY.medium;
+    config.mode = saved.mode === 'daily' ? 'daily' : 'infinite';
+    config.length = config.mode === 'daily' ? 5 : Number(saved.length || 5);
+    config.difficulty = DIFFICULTY[saved.difficulty] ? saved.difficulty : 'medium';
+    setPressed('[data-wordle-mode]', 'data-wordle-mode', config.mode);
+    setPressed('[data-wordle-length]', 'data-wordle-length', config.length || '');
+    setPressed('[data-wordle-difficulty]', 'data-wordle-difficulty', config.difficulty);
+    state = {
+      mode: config.mode,
+      length: Number(saved.length || config.length || 5),
+      difficulty: config.difficulty,
+      maxRows: Number(saved.maxRows || difficulty.max),
+      answer: String(saved.answer || '').toUpperCase(),
+      row: Number(saved.row || 0),
+      current: String(saved.current || ''),
+      done: !!saved.done,
+      guesses: Array.isArray(saved.guesses) ? saved.guesses : [],
+      keyboard: saved.keyboard && typeof saved.keyboard === 'object' ? saved.keyboard : {},
+      constraints: {
+        greens: saved.constraints?.greens && typeof saved.constraints.greens === 'object' ? saved.constraints.greens : {},
+        yellows: new Set(Array.isArray(saved.constraints?.yellows) ? saved.constraints.yellows : [])
+      },
+      date: saved.date || todayKey()
+    };
+    createBoard();
+    createKeyboard();
+    state.guesses.forEach((entry, index) => paintSavedGuess(index, entry.guess || '', entry.result || []));
+    applySavedKeyboard();
+    renderCurrentGuess();
+    renderClues();
+    updateHud();
+    updateStepVisibility();
+    showGame();
+    if (els.input) {
+      els.input.maxLength = state.length;
+      els.input.value = state.current || '';
+    }
+    setMessage(state.done ? 'Saved round restored.' : 'Cloud save restored. Continue your round.');
+    return true;
+  }
+
   function bestStatus(a, b) {
     const rank = { missing: 1, misplaced: 2, correct: 3 };
     return rank[b] > rank[a] ? b : a;
@@ -547,6 +716,7 @@
     const result = win ? 'win' : 'loss';
     setMessage(win ? `Solved in ${attempts} ${attempts === 1 ? 'try' : 'tries'}.` : `The word was ${state.answer}.`, tone);
     saveProgress(result, attempts);
+    saveWordleState(true);
     setTimeout(() => {
       openModal({
         kicker: win ? 'Victory' : 'Answer revealed',
@@ -601,6 +771,7 @@
     updateHardConstraints(guess, result);
     renderClues();
     updateHud();
+    saveWordleState();
     if (guess === state.answer) {
       setTimeout(() => finish(true), state.length * 95 + 260);
       return;
@@ -625,12 +796,14 @@
     if (state.current.length >= state.length) return;
     state.current += String(letter || '').toUpperCase();
     renderCurrentGuess();
+    saveWordleState();
   }
 
   function backspace() {
     if (!state || state.done) return;
     state.current = state.current.slice(0, -1);
     renderCurrentGuess();
+    saveWordleState();
   }
 
   function openModal({ kicker = 'Wordle', title = 'How to play', body = '' } = {}) {
@@ -730,7 +903,8 @@
       done: false,
       guesses: [],
       keyboard: {},
-      constraints: { greens: {}, yellows: new Set() }
+      constraints: { greens: {}, yellows: new Set() },
+      date: todayKey()
     };
     createBoard();
     createKeyboard();
@@ -744,6 +918,7 @@
       setTimeout(() => els.input.focus({ preventScroll: true }), 80);
     }
     showToast(`${state.mode === 'daily' ? 'Daily Challenge' : 'Infinite Challenge'} started.`);
+    saveWordleState(true);
   }
 
   document.querySelectorAll('[data-wordle-mode]').forEach((button) => button.addEventListener('click', () => selectMode(button.dataset.wordleMode)));
@@ -764,10 +939,11 @@
     state.current = normalizeGuess(els.input.value);
     els.input.value = state.current;
     renderCurrentGuess();
+    saveWordleState();
   });
   els.input?.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') { event.preventDefault(); submitGuess(); }
-    if (event.key === 'Backspace') setTimeout(() => { if (state) { state.current = normalizeGuess(els.input.value); renderCurrentGuess(); } }, 0);
+    if (event.key === 'Backspace') setTimeout(() => { if (state) { state.current = normalizeGuess(els.input.value); renderCurrentGuess(); saveWordleState(); } }, 0);
   });
   els.keyboard?.addEventListener('click', (event) => {
     const key = event.target.closest('.wordle-key');
@@ -790,6 +966,10 @@
   });
   document.querySelectorAll('[data-wordle-modal-close]').forEach((btn) => btn.addEventListener('click', closeModal));
 
-  updateStepVisibility();
-  updateHud();
+  async function bootWordle() {
+    updateStepVisibility();
+    await hydrateWordleCloud();
+    if (!restoreWordleStateFromLocal()) updateHud();
+  }
+  bootWordle();
 })();

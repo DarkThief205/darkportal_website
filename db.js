@@ -191,6 +191,18 @@ async function init() {
   `);
 
   await p.query(`
+    CREATE TABLE IF NOT EXISTS game_saves (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      save_key TEXT NOT NULL,
+      data_json TEXT NOT NULL DEFAULT '{}',
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      updated_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      UNIQUE(user_id, save_key)
+    )
+  `);
+
+  await p.query(`
     CREATE TABLE IF NOT EXISTS portal_events (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -225,6 +237,8 @@ async function init() {
   `);
 
   await p.query(`CREATE INDEX IF NOT EXISTS game_progress_user_idx ON game_progress(user_id)`);
+  await p.query(`CREATE INDEX IF NOT EXISTS game_saves_user_idx ON game_saves(user_id)`);
+  await p.query(`CREATE INDEX IF NOT EXISTS game_saves_prefix_idx ON game_saves(user_id, save_key)`);
   await p.query(`CREATE INDEX IF NOT EXISTS feedback_user_idx ON portal_feedback(user_id)`);
   await p.query(`CREATE INDEX IF NOT EXISTS tictactoe_updated_idx ON tictactoe_matches(updated_at)`);
 }

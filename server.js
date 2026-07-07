@@ -1482,6 +1482,124 @@ app.post('/api/games/progress/:game', getBearerUser, (req, res) => {
   );
 });
 
+
+function cleanSaveKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_.:-]{1,79}$/.test(key) ? key : '';
+}
+
+function normalizeSavePayload(raw) {
+  if (raw === undefined) return {};
+  if (raw && typeof raw === 'object') return raw;
+  return { value: raw };
+}
+
+function safeSaveJson(payload) {
+  const json = JSON.stringify(normalizeSavePayload(payload));
+  if (json.length > 250000) {
+    const err = new Error('Save data is too large.');
+    err.statusCode = 413;
+    throw err;
+  }
+  return json;
+}
+
+app.get('/api/games/saves', getBearerUser, async (req, res) => {
+  try {
+    const prefix = String(req.query.prefix || '').trim().toLowerCase();
+    const params = [req.user.id];
+    let where = 'user_id = ?';
+    if (prefix) {
+      if (!/^[a-z0-9][a-z0-9_.:-]{0,79}$/.test(prefix)) return res.status(400).json({ error: 'Invalid save prefix' });
+      where += ' AND save_key LIKE ?';
+      params.push(`${prefix}%`);
+    }
+    const rows = await dbAll(
+      `SELECT save_key, data_json, updated_at FROM game_saves WHERE ${where} ORDER BY updated_at DESC LIMIT 100`,
+      params
+    );
+    res.json({ saves: rows.map((row) => {
+      let data = null;
+      try { data = JSON.parse(row.data_json || '{}'); } catch (_) { data = {}; }
+      return { save_key: row.save_key, data, updated_at: Number(row.updated_at || 0) };
+    }) });
+  } catch (err) {
+    console.error('game saves list error', err);
+    res.status(500).json({ error: 'Could not load game saves' });
+  }
+});
+
+app.get('/api/games/save/:key', getBearerUser, async (req, res) => {
+  try {
+    const key = cleanSaveKey(req.params.key);
+    if (!key) return res.status(400).json({ error: 'Invalid save key' });
+    const row = await dbGet(`SELECT save_key, data_json, updated_at FROM game_saves WHERE user_id = ? AND save_key = ?`, [req.user.id, key]);
+    if (!row) return res.status(404).json({ error: 'Save not found' });
+    let data = {};
+    try { data = JSON.parse(row.data_json || '{}'); } catch (_) { data = {}; }
+    res.json({ save_key: row.save_key, data, updated_at: Number(row.updated_at || 0) });
+  } catch (err) {
+    console.error('game save read error', err);
+    res.status(500).json({ error: 'Could not load game save' });
+  }
+});
+
+app.put('/api/games/save/:key', getBearerUser, async (req, res) => {
+  try {
+    const key = cleanSaveKey(req.params.key);
+    if (!key) return res.status(400).json({ error: 'Invalid save key' });
+    const data = req.body && Object.prototype.hasOwnProperty.call(req.body, 'data') ? req.body.data : req.body;
+    const json = safeSaveJson(data);
+    const now = Date.now();
+    await dbRun(
+      `INSERT INTO game_saves (user_id, save_key, data_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, save_key) DO UPDATE SET
+         data_json = EXCLUDED.data_json,
+         updated_at = EXCLUDED.updated_at`,
+      [req.user.id, key, json, now, now]
+    );
+    res.json({ ok: true, save_key: key, updated_at: now });
+  } catch (err) {
+    console.error('game save write error', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Could not save game data' });
+  }
+});
+
+app.post('/api/games/save/:key', getBearerUser, async (req, res) => {
+  try {
+    const key = cleanSaveKey(req.params.key);
+    if (!key) return res.status(400).json({ error: 'Invalid save key' });
+    const data = req.body && Object.prototype.hasOwnProperty.call(req.body, 'data') ? req.body.data : req.body;
+    const json = safeSaveJson(data);
+    const now = Date.now();
+    await dbRun(
+      `INSERT INTO game_saves (user_id, save_key, data_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(user_id, save_key) DO UPDATE SET
+         data_json = EXCLUDED.data_json,
+         updated_at = EXCLUDED.updated_at`,
+      [req.user.id, key, json, now, now]
+    );
+    res.json({ ok: true, save_key: key, updated_at: now });
+  } catch (err) {
+    console.error('game save write error', err);
+    res.status(err.statusCode || 500).json({ error: err.message || 'Could not save game data' });
+  }
+});
+
+app.delete('/api/games/save/:key', getBearerUser, async (req, res) => {
+  try {
+    const key = cleanSaveKey(req.params.key);
+    if (!key) return res.status(400).json({ error: 'Invalid save key' });
+    await dbRun(`DELETE FROM game_saves WHERE user_id = ? AND save_key = ?`, [req.user.id, key]);
+    res.json({ ok: true, save_key: key });
+  } catch (err) {
+    console.error('game save delete error', err);
+    res.status(500).json({ error: 'Could not delete game save' });
+  }
+});
+
 app.post('/api/feedback', getBearerUser, async (req, res) => {
   try {
     const type = String(req.body.type || 'other').trim().toLowerCase().slice(0, 40);
